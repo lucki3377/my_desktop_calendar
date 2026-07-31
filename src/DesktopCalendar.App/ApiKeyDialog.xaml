@@ -1,0 +1,30 @@
+<Window x:Class="DesktopCalendar.App.ApiKeyDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        mc:Ignorable="d"
+        Title="공휴일 API 키 설정" Width="420" Height="220"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" TextWrapping="Wrap"
+                    Text="공공데이터포털(data.go.kr)에서 '한국천문연구원_특일 정보' 서비스를 신청하고 발급받은 서비스 키(Decoding)를 입력하세요." />
+
+        <TextBlock Grid.Row="1" Margin="0,10,0,4" Text="서비스 키" />
+        <TextBox Grid.Row="2" Name="ApiKeyBox" />
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Name="SaveButton" Content="저장" Width="70" Margin="0,0,6,0" Click="SaveButton_Click" IsDefault="True" />
+            <Button Name="CancelButton" Content="취소" Width="70" Click="CancelButton_Click" IsCancel="True" />
+        </StackPanel>
+    </Grid>
+</Window>
