@@ -36,24 +36,25 @@ public sealed class ReminderService(TaskbarIcon trayIcon) : IDisposable
         var now = DateTime.Now;
         var after = ReminderPlanner.ClampLookback(LoadLastChecked(), now, MaxLookback);
 
-        // 알림은 최대 1일 전까지만 걸 수 있으므로, 그 범위의 일정만 후보로 읽으면 충분하다.
-        var candidates = _repository.GetWithReminderStartingBetween(
-            after, now.AddMinutes(ReminderPlanner.MaxMinutesBefore));
+        // 알림은 최대 1일 전까지만 걸 수 있으므로, 그 범위의 회차만 살펴보면 충분하다.
+        var rangeEnd = now.AddMinutes(ReminderPlanner.MaxMinutesBefore);
+        var candidates = _repository.GetReminderCandidates(after, rangeEnd);
+        var occurrences = RecurrenceExpander.ExpandAll(candidates, after, rangeEnd);
 
-        foreach (var schedule in ReminderPlanner.SelectDue(candidates, after, now))
-            Notify(schedule);
+        foreach (var occurrence in ReminderPlanner.SelectDue(occurrences, after, now))
+            Notify(occurrence);
 
         SaveLastChecked(now);
     }
 
-    private void Notify(Schedule schedule)
+    private void Notify(ScheduleOccurrence occurrence)
     {
-        var when = schedule.IsAllDay
-            ? schedule.StartAt.ToString("M월 d일 (ddd)", CultureInfo.GetCultureInfo("ko-KR"))
-            : schedule.StartAt.ToString("HH:mm");
+        var when = occurrence.IsAllDay
+            ? occurrence.StartAt.ToString("M월 d일 (ddd)", CultureInfo.GetCultureInfo("ko-KR"))
+            : occurrence.StartAt.ToString("HH:mm");
 
-        var message = $"{when} · {ReminderPlanner.DescribeLeadTime(schedule)}";
-        trayIcon.ShowBalloonTip(schedule.Title, message, BalloonIcon.Info);
+        var message = $"{when} · {ReminderPlanner.DescribeLeadTime(occurrence)}";
+        trayIcon.ShowBalloonTip(occurrence.Title, message, BalloonIcon.Info);
     }
 
     private DateTime? LoadLastChecked()

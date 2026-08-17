@@ -34,6 +34,9 @@ public sealed class ScheduleRepository
                     IsAllDay              INTEGER NOT NULL,
                     Color                 TEXT NULL,
                     ReminderMinutesBefore INTEGER NULL,
+                    Recurrence            TEXT NULL,
+                    RecurrenceUntil       TEXT NULL,
+                    RecurrenceExceptions  TEXT NULL,
                     CreatedAt             TEXT NOT NULL,
                     UpdatedAt             TEXT NOT NULL
                 );
@@ -42,8 +45,11 @@ public sealed class ScheduleRepository
             command.ExecuteNonQuery();
         }
 
-        // 이전 버전에서 만들어진 DB에는 알림 열이 없다 (2026-08-17 추가).
+        // 이전 버전에서 만들어진 DB에는 없는 열들 (2026-08-17 추가).
         AddColumnIfMissing(connection, "ReminderMinutesBefore", "INTEGER NULL");
+        AddColumnIfMissing(connection, "Recurrence", "TEXT NULL");
+        AddColumnIfMissing(connection, "RecurrenceUntil", "TEXT NULL");
+        AddColumnIfMissing(connection, "RecurrenceExceptions", "TEXT NULL");
     }
 
     private static void AddColumnIfMissing(SqliteConnection connection, string columnName, string columnType)
@@ -61,33 +67,47 @@ public sealed class ScheduleRepository
         alter.ExecuteNonQuery();
     }
 
-    public IReadOnlyList<Schedule> GetByMonth(int year, int month)
+    /// <summary>그 달에 실제로 열리는 회차들 (반복 일정은 펼쳐서 돌려준다).</summary>
+    public IReadOnlyList<ScheduleOccurrence> GetOccurrencesByMonth(int year, int month)
     {
         var monthStart = new DateTime(year, month, 1);
-        var monthEnd = monthStart.AddMonths(1);
-        return GetOverlapping(monthStart, monthEnd);
+        return GetOccurrences(monthStart, monthStart.AddMonths(1));
     }
 
-    public IReadOnlyList<Schedule> GetByDate(DateOnly date)
+    /// <summary>그 날짜에 열리는 회차들.</summary>
+    public IReadOnlyList<ScheduleOccurrence> GetOccurrencesByDate(DateOnly date)
     {
         var dayStart = date.ToDateTime(TimeOnly.MinValue);
-        var dayEnd = dayStart.AddDays(1);
-        return GetOverlapping(dayStart, dayEnd);
+        return GetOccurrences(dayStart, dayStart.AddDays(1));
     }
 
-    private IReadOnlyList<Schedule> GetOverlapping(DateTime rangeStart, DateTime rangeEnd)
+    private IReadOnlyList<ScheduleOccurrence> GetOccurrences(DateTime rangeStart, DateTime rangeEnd) =>
+        RecurrenceExpander.ExpandAll(GetCandidates(rangeStart, rangeEnd), rangeStart, rangeEnd);
+
+    /// <summary>
+    /// 구간에 걸릴 <i>가능성이</i> 있는 일정을 넓게 읽어온다. 반복 일정은 시작이 한참 전이어도
+    /// 지금 구간에 열릴 수 있으므로, 끝난 반복(RecurrenceUntil이 지난 것)만 걸러낸다.
+    /// 실제로 열리는지는 <see cref="RecurrenceExpander"/>가 판단한다.
+    /// </summary>
+    private IReadOnlyList<Schedule> GetCandidates(DateTime rangeStart, DateTime rangeEnd)
     {
         using var connection = Open();
         using var command = connection.CreateCommand();
         command.CommandText =
-            """
-            SELECT Id, Title, Description, StartAt, EndAt, IsAllDay, Color, CreatedAt, UpdatedAt, ReminderMinutesBefore
+            $"""
+            SELECT {SelectColumns}
             FROM Schedule
-            WHERE StartAt < $rangeEnd AND EndAt >= $rangeStart
+            WHERE StartAt < $rangeEnd
+              AND (
+                    (COALESCE(Recurrence, 'None') = 'None' AND EndAt >= $rangeStart)
+                 OR (COALESCE(Recurrence, 'None') <> 'None'
+                     AND (RecurrenceUntil IS NULL OR RecurrenceUntil >= $rangeStartDate))
+              )
             ORDER BY StartAt;
             """;
         command.Parameters.AddWithValue("$rangeStart", ToDbString(rangeStart));
         command.Parameters.AddWithValue("$rangeEnd", ToDbString(rangeEnd));
+        command.Parameters.AddWithValue("$rangeStartDate", ToDbDate(DateOnly.FromDateTime(rangeStart)));
 
         var results = new List<Schedule>();
         using var reader = command.ExecuteReader();
@@ -106,8 +126,10 @@ public sealed class ScheduleRepository
         using var command = connection.CreateCommand();
         command.CommandText =
             """
-            INSERT INTO Schedule (Id, Title, Description, StartAt, EndAt, IsAllDay, Color, ReminderMinutesBefore, CreatedAt, UpdatedAt)
-            VALUES ($id, $title, $description, $startAt, $endAt, $isAllDay, $color, $reminderMinutesBefore, $createdAt, $updatedAt);
+            INSERT INTO Schedule (Id, Title, Description, StartAt, EndAt, IsAllDay, Color, ReminderMinutesBefore,
+                                  Recurrence, RecurrenceUntil, RecurrenceExceptions, CreatedAt, UpdatedAt)
+            VALUES ($id, $title, $description, $startAt, $endAt, $isAllDay, $color, $reminderMinutesBefore,
+                    $recurrence, $recurrenceUntil, $recurrenceExceptions, $createdAt, $updatedAt);
             """;
         BindParameters(command, schedule);
         command.ExecuteNonQuery();
@@ -125,11 +147,34 @@ public sealed class ScheduleRepository
             UPDATE Schedule
             SET Title = $title, Description = $description, StartAt = $startAt, EndAt = $endAt,
                 IsAllDay = $isAllDay, Color = $color, ReminderMinutesBefore = $reminderMinutesBefore,
-                UpdatedAt = $updatedAt
+                Recurrence = $recurrence, RecurrenceUntil = $recurrenceUntil,
+                RecurrenceExceptions = $recurrenceExceptions, UpdatedAt = $updatedAt
             WHERE Id = $id;
             """;
         BindParameters(command, schedule);
         command.ExecuteNonQuery();
+    }
+
+    public Schedule? GetById(Guid id)
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT {SelectColumns} FROM Schedule WHERE Id = $id;";
+        command.Parameters.AddWithValue("$id", id.ToString());
+
+        using var reader = command.ExecuteReader();
+        return reader.Read() ? ReadSchedule(reader) : null;
+    }
+
+    /// <summary>반복 일정에서 특정 회차 하루만 빼고 싶을 때 (그 날짜를 제외 목록에 넣는다).</summary>
+    public void AddRecurrenceException(Guid id, DateOnly date)
+    {
+        var schedule = GetById(id);
+        if (schedule is null || schedule.RecurrenceExceptions.Contains(date))
+            return;
+
+        schedule.RecurrenceExceptions = [.. schedule.RecurrenceExceptions, date];
+        Update(schedule);
     }
 
     public void Delete(Guid id)
@@ -158,9 +203,20 @@ public sealed class ScheduleRepository
         command.Parameters.AddWithValue("$isAllDay", schedule.IsAllDay ? 1 : 0);
         command.Parameters.AddWithValue("$color", (object?)schedule.Color ?? DBNull.Value);
         command.Parameters.AddWithValue("$reminderMinutesBefore", (object?)schedule.ReminderMinutesBefore ?? DBNull.Value);
+        command.Parameters.AddWithValue("$recurrence", schedule.Recurrence.ToString());
+        command.Parameters.AddWithValue("$recurrenceUntil",
+            schedule.RecurrenceUntil is { } until ? ToDbDate(until) : DBNull.Value);
+        command.Parameters.AddWithValue("$recurrenceExceptions",
+            schedule.RecurrenceExceptions.Count == 0
+                ? DBNull.Value
+                : string.Join(',', schedule.RecurrenceExceptions.Select(ToDbDate)));
         command.Parameters.AddWithValue("$createdAt", ToDbString(schedule.CreatedAt));
         command.Parameters.AddWithValue("$updatedAt", ToDbString(schedule.UpdatedAt));
     }
+
+    private const string SelectColumns =
+        "Id, Title, Description, StartAt, EndAt, IsAllDay, Color, CreatedAt, UpdatedAt, " +
+        "ReminderMinutesBefore, Recurrence, RecurrenceUntil, RecurrenceExceptions";
 
     private static Schedule ReadSchedule(SqliteDataReader reader) => new()
     {
@@ -174,24 +230,35 @@ public sealed class ScheduleRepository
         CreatedAt = FromDbString(reader.GetString(7)),
         UpdatedAt = FromDbString(reader.GetString(8)),
         ReminderMinutesBefore = reader.IsDBNull(9) ? null : reader.GetInt32(9),
+        Recurrence = reader.IsDBNull(10) ? RecurrenceType.None : ParseRecurrence(reader.GetString(10)),
+        RecurrenceUntil = reader.IsDBNull(11) ? null : FromDbDate(reader.GetString(11)),
+        RecurrenceExceptions = reader.IsDBNull(12) ? [] : ParseDates(reader.GetString(12)),
     };
 
     /// <summary>
-    /// 알림이 설정된 일정 중 시작 시각이 주어진 구간에 있는 것들. 알림 서비스가 주기적으로 훑는 용도다.
+    /// 알림이 걸린 일정 후보. 반복 일정은 원래 시작 시각이 한참 전이어도 지금 알림이 필요할 수 있으므로,
+    /// 끝나지 않은 반복은 전부 후보로 넘기고 실제 회차 계산은 호출 쪽(<see cref="RecurrenceExpander"/>)에 맡긴다.
     /// </summary>
-    public IReadOnlyList<Schedule> GetWithReminderStartingBetween(DateTime fromStartAt, DateTime toStartAt)
+    public IReadOnlyList<Schedule> GetReminderCandidates(DateTime fromStartAt, DateTime toStartAt)
     {
         using var connection = Open();
         using var command = connection.CreateCommand();
         command.CommandText =
-            """
-            SELECT Id, Title, Description, StartAt, EndAt, IsAllDay, Color, CreatedAt, UpdatedAt, ReminderMinutesBefore
+            $"""
+            SELECT {SelectColumns}
             FROM Schedule
-            WHERE ReminderMinutesBefore IS NOT NULL AND StartAt >= $from AND StartAt <= $to
+            WHERE ReminderMinutesBefore IS NOT NULL
+              AND (
+                    (COALESCE(Recurrence, 'None') = 'None' AND StartAt >= $from AND StartAt <= $to)
+                 OR (COALESCE(Recurrence, 'None') <> 'None'
+                     AND StartAt <= $to
+                     AND (RecurrenceUntil IS NULL OR RecurrenceUntil >= $fromDate))
+              )
             ORDER BY StartAt;
             """;
         command.Parameters.AddWithValue("$from", ToDbString(fromStartAt));
         command.Parameters.AddWithValue("$to", ToDbString(toStartAt));
+        command.Parameters.AddWithValue("$fromDate", ToDbDate(DateOnly.FromDateTime(fromStartAt)));
 
         var results = new List<Schedule>();
         using var reader = command.ExecuteReader();
@@ -201,8 +268,20 @@ public sealed class ScheduleRepository
         return results;
     }
 
+    private static RecurrenceType ParseRecurrence(string value) =>
+        Enum.TryParse<RecurrenceType>(value, out var parsed) ? parsed : RecurrenceType.None;
+
+    private static IReadOnlyList<DateOnly> ParseDates(string value) =>
+        [.. value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                 .Select(FromDbDate)];
+
     private static string ToDbString(DateTime value) => value.ToString("o", CultureInfo.InvariantCulture);
 
     private static DateTime FromDbString(string value) =>
         DateTime.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+
+    private static string ToDbDate(DateOnly value) => value.ToString("yyyy-MM-dd");
+
+    private static DateOnly FromDbDate(string value) =>
+        DateOnly.ParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture);
 }

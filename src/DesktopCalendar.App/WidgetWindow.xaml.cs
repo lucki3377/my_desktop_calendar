@@ -303,11 +303,11 @@ public partial class WidgetWindow : Window
 
         var itemsByDate = new Dictionary<DateOnly, List<DayItem>>();
 
-        foreach (var schedule in _scheduleRepository.GetByMonth(_displayedMonth.Year, _displayedMonth.Month))
+        foreach (var occurrence in _scheduleRepository.GetOccurrencesByMonth(_displayedMonth.Year, _displayedMonth.Month))
         {
             AddSpanningItem(itemsByDate,
-                new DayItem(schedule.Title, schedule.StartAt, schedule.IsAllDay, IsGoogle: false, schedule.Color),
-                schedule.StartAt, schedule.EndAt);
+                new DayItem(occurrence.Title, occurrence.StartAt, occurrence.IsAllDay, IsGoogle: false, occurrence.Color),
+                occurrence.StartAt, occurrence.EndAt);
         }
 
         // 구글 일정 병합 (DESIGN.md 4.5 — 토글이 꺼져 있으면 캐시가 있어도 표시하지 않음)

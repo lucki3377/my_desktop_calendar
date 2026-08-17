@@ -21,19 +21,20 @@ public static class ReminderPlanner
     }
 
     /// <summary>
-    /// 알림 시각이 (<paramref name="after"/>, <paramref name="now"/>] 구간에 들어온 일정들.
+    /// 알림 시각이 (<paramref name="after"/>, <paramref name="now"/>] 구간에 들어온 회차들.
     /// 구간을 반열림으로 둬서 같은 알림이 두 번 나가지 않는다.
+    /// 반복 일정도 회차 단위로 판단하므로 매 회차마다 제때 알림이 간다.
     /// </summary>
-    public static IReadOnlyList<Schedule> SelectDue(
-        IEnumerable<Schedule> schedules, DateTime after, DateTime now) =>
-        [.. schedules
-            .Where(s => s.ReminderAt is { } reminderAt && reminderAt > after && reminderAt <= now)
-            .OrderBy(s => s.StartAt)];
+    public static IReadOnlyList<ScheduleOccurrence> SelectDue(
+        IEnumerable<ScheduleOccurrence> occurrences, DateTime after, DateTime now) =>
+        [.. occurrences
+            .Where(o => o.ReminderAt is { } reminderAt && reminderAt > after && reminderAt <= now)
+            .OrderBy(o => o.StartAt)];
 
     /// <summary>알림 문구에 쓸 "언제 시작하는지" 표현.</summary>
-    public static string DescribeLeadTime(Schedule schedule)
+    public static string DescribeLeadTime(ScheduleOccurrence occurrence)
     {
-        if (schedule.ReminderMinutesBefore is not { } minutes || minutes <= 0)
+        if (occurrence.ReminderMinutesBefore is not { } minutes || minutes <= 0)
             return "지금 시작합니다.";
 
         return minutes switch

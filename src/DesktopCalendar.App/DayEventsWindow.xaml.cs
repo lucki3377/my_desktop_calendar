@@ -71,8 +71,9 @@ public partial class DayEventsWindow : Window
 
     private void LoadList()
     {
-        var entries = _repository.GetByDate(_date)
-            .Select(s => new ScheduleListItem(s, Format(s.StartAt, s.EndAt, s.IsAllDay, s.Title)))
+        var entries = _repository.GetOccurrencesByDate(_date)
+            .Select(o => new ScheduleListItem(
+                o, Format(o.StartAt, o.EndAt, o.IsAllDay, o.Title) + RecurrenceSuffix(o)))
             .ToList();
 
         entries.AddRange(_googleEvents.Select(g => new ScheduleListItem(
@@ -90,6 +91,15 @@ public partial class DayEventsWindow : Window
             ? $"{rangePrefix}[종일] {title}"
             : $"{rangePrefix}{startAt:HH:mm}~{endAt:HH:mm}  {title}";
     }
+
+    private static string RecurrenceSuffix(ScheduleOccurrence occurrence) => occurrence.Schedule.Recurrence switch
+    {
+        RecurrenceType.Daily => "  (매일)",
+        RecurrenceType.Weekly => "  (매주)",
+        RecurrenceType.Monthly => "  (매월)",
+        RecurrenceType.Yearly => "  (매년)",
+        _ => string.Empty,
+    };
 
     private void AddButton_Click(object sender, RoutedEventArgs e)
     {
@@ -109,13 +119,14 @@ public partial class DayEventsWindow : Window
             return;
         }
 
-        if (item.Schedule is null)
+        if (item.Occurrence is null)
         {
             ShowGoogleReadOnlyNotice();
             return;
         }
 
-        var editor = new ScheduleEditorWindow(_date, item.Schedule);
+        // 반복 일정은 전체 시리즈를 편집한다 (회차 하나만 따로 바꾸는 것은 지원하지 않음).
+        var editor = new ScheduleEditorWindow(_date, item.Occurrence.Schedule);
         if (editor.ShowDialog() == true && editor.Result is not null)
         {
             _repository.Update(editor.Result);
@@ -131,19 +142,52 @@ public partial class DayEventsWindow : Window
             return;
         }
 
-        if (item.Schedule is null)
+        if (item.Occurrence is null)
         {
             ShowGoogleReadOnlyNotice();
             return;
         }
 
-        var confirm = MessageBox.Show($"'{item.Schedule.Title}' 일정을 삭제할까요?", "삭제 확인",
+        var schedule = item.Occurrence.Schedule;
+
+        if (schedule.IsRecurring)
+        {
+            DeleteRecurring(item.Occurrence);
+            return;
+        }
+
+        var confirm = MessageBox.Show($"'{schedule.Title}' 일정을 삭제할까요?", "삭제 확인",
             MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (confirm == MessageBoxResult.Yes)
         {
-            _repository.Delete(item.Schedule.Id);
+            _repository.Delete(schedule.Id);
             LoadList();
         }
+    }
+
+    /// <summary>반복 일정은 "이 날짜만" 뺄지 "전체"를 지울지 물어본다.</summary>
+    private void DeleteRecurring(ScheduleOccurrence occurrence)
+    {
+        var choice = MessageBox.Show(
+            $"'{occurrence.Title}'은(는) 반복 일정입니다.\n\n" +
+            "[예] 이 날짜만 삭제\n" +
+            "[아니오] 반복 전체 삭제\n" +
+            "[취소] 그대로 두기",
+            "반복 일정 삭제", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+
+        switch (choice)
+        {
+            case MessageBoxResult.Yes:
+                _repository.AddRecurrenceException(occurrence.Schedule.Id, occurrence.StartDate);
+                break;
+            case MessageBoxResult.No:
+                _repository.Delete(occurrence.Schedule.Id);
+                break;
+            default:
+                return;
+        }
+
+        LoadList();
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
@@ -153,11 +197,11 @@ public partial class DayEventsWindow : Window
             "구글 캘린더에서 가져온 일정은 읽기 전용입니다. 구글 캘린더에서 직접 수정하세요.",
             "안내", MessageBoxButton.OK, MessageBoxImage.Information);
 
-    /// <summary><paramref name="Schedule"/>이 null이면 구글에서 가져온 읽기 전용 항목이다.</summary>
-    public sealed record ScheduleListItem(Schedule? Schedule, string Display)
+    /// <summary><paramref name="Occurrence"/>가 null이면 구글에서 가져온 읽기 전용 항목이다.</summary>
+    public sealed record ScheduleListItem(ScheduleOccurrence? Occurrence, string Display)
     {
         /// <summary>목록 앞에 붙는 색 표시. 달력 칸의 칩과 같은 색이 나오도록 같은 규칙을 쓴다.</summary>
-        public Brush ChipBrush => ScheduleColors.ToBrush(Schedule?.Color, isGoogle: Schedule is null);
+        public Brush ChipBrush => ScheduleColors.ToBrush(Occurrence?.Color, isGoogle: Occurrence is null);
 
         public override string ToString() => Display;
     }

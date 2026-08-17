@@ -163,6 +163,16 @@ Core.Desktop  Core.Calendar  Core.Holiday   Core.Google    Core.Storage
 - 판단 로직은 `ReminderPlanner`(Core.Calendar, WPF 비의존 순수 로직)에 두고 단위테스트로 검증한다
 - 구글에서 가져온 일정은 알림 대상이 아니다 (읽기 전용 캐시이고, 알림은 구글 쪽에서 이미 처리됨)
 
+### 4.11 반복 일정 (2026-08-17 추가)
+
+- 주기: 매일 / 매주 / 매월 / 매년 (`Schedule.Recurrence`). 종료일(`RecurrenceUntil`)은 비우면 무기한
+- 반복 일정은 DB에 **한 줄로만** 저장하고, 달을 그릴 때 `RecurrenceExpander`가 그 구간의 회차로 펼친다 (회차를 미리 다 만들어 두지 않으므로 무기한 반복도 문제없음)
+- **없는 날짜는 당기지 않고 건너뛴다**: 매달 31일 반복은 2월에 열리지 않고, 2월 29일 매년 반복은 평년에 열리지 않는다. 흔한 캘린더 앱들과 같은 동작 (D-day의 매년 반복이 2/28로 당기는 것과는 별개 규칙 — 그쪽은 "며칠 남았는지"를 늘 보여줘야 하므로)
+- **개별 회차 삭제**: 반복 일정을 삭제하면 "이 날짜만 / 반복 전체"를 묻는다. "이 날짜만"은 그 날짜를 `RecurrenceExceptions`에 넣어 이후 펼칠 때 건너뛰게 한다
+- **개별 회차 수정은 지원하지 않는다**(수정은 항상 시리즈 전체). 회차별 예외 데이터를 따로 들고 있어야 해서 최초 버전 범위 밖
+- 알림도 회차 단위로 판단하므로 반복 일정의 매 회차마다 제때 알림이 간다 (`ReminderPlanner.SelectDue`가 `ScheduleOccurrence`를 받음)
+- 조회 시 반복 일정은 시작이 한참 전이어도 지금 구간에 열릴 수 있으므로, SQL에서는 "끝나지 않은 반복"을 넓게 읽고 실제 판단은 `RecurrenceExpander`에 맡긴다
+
 ### 4.8 설정 저장
 
 - `Settings` 테이블(or 단순 JSON 파일 `settings.json`) — SQLite에 key-value로 저장 권장(단일 저장소로 통일)
@@ -191,6 +201,9 @@ Schedule (로컬 일정)
 - IsAllDay: bool
 - Color: string?
 - ReminderMinutesBefore: int?   (2026-08-17 추가, null이면 알림 없음)
+- Recurrence: enum(None, Daily, Weekly, Monthly, Yearly)  (2026-08-17 추가)
+- RecurrenceUntil: date?        (null이면 무기한)
+- RecurrenceExceptions: string? (건너뛸 날짜들, "yyyy-MM-dd" 쉼표 구분)
 - CreatedAt / UpdatedAt: datetime
 
 Holiday (공휴일 캐시)
@@ -376,3 +389,12 @@ Settings (key-value)
   - **실행 검증**: 트레이 아이콘 표시 확인, 알림 콤보 드롭다운 렌더링 확인(스크린샷). 시작 2분 뒤 일정을 "시작할 때" 알림으로 저장(`Reminder=0` DB 확인) → 실제로 풍선 알림이 뜨는 것까지 확인. 테스트 일정은 삭제함.
   - 참고: 콤보 항목의 UIA 이름이 레코드의 `ToString()`(`ReminderOption { Label = ... }`)으로 나오지만 화면 표시는 `DisplayMemberPath` 덕에 정상이다 — UI Automation으로 항목을 고를 때는 이름에 `Label = ...`이 포함된 것으로 찾아야 한다.
   - `dotnet test` 52개 통과(알림 로직 14개 신규).
+- **2026-08-17**: 반복 일정 추가 (추천 기능 3번). 설계는 4.11 참조.
+  - `RecurrenceType`(None/Daily/Weekly/Monthly/Yearly) + `RecurrenceUntil` + `RecurrenceExceptions`를 `Schedule`에 추가하고 DB 열 3개를 마이그레이션으로 붙임.
+  - `RecurrenceExpander`(순수 로직): 구간에 열리는 회차만 펼친다. 시작이 한참 전인 반복도 빠르게 처리하려고 회차 번호를 date 연산으로 건너뛰고, 무기한 반복이 폭주하지 않게 상한을 둔다. `ScheduleOccurrence` 레코드 신설. 테스트 11개.
+  - `ScheduleRepository`의 조회를 회차 단위(`GetOccurrencesByMonth`/`GetOccurrencesByDate`)로 바꾸고, SQL은 "끝나지 않은 반복"을 넓게 읽도록 수정. `GetById`/`AddRecurrenceException` 추가.
+  - 알림도 회차 단위로 판단하도록 `ReminderPlanner.SelectDue`가 `ScheduleOccurrence`를 받게 변경(안 그러면 반복 일정은 첫 회차에만 알림이 갔을 것). `GetWithReminderStartingBetween` → `GetReminderCandidates`로 교체.
+  - `ScheduleEditorWindow`에 반복 주기 콤보 + 반복 종료 DatePicker 추가(반복 안 함이면 종료일 비활성). 편집 시 기존 제외 날짜를 유지한다. Grid row 인덱스가 꼬여 XAML을 한 번 정리해 다시 씀.
+  - `DayEventsWindow`: 목록에 "(매주)" 같은 반복 표시, 삭제 시 "이 날짜만 / 반복 전체 / 취소"를 묻는다. 수정은 항상 시리즈 전체.
+  - **실행 검증**: 9/3(목)에 매주 반복 일정 저장 → 9/3·10·17·24 네 칸에 렌더링 확인(스크린샷). 9/17에서 "이 날짜만 삭제" → 9/17만 사라지고 나머지 회차는 유지되는 것 확인. 이어서 "반복 전체 삭제"로 정리.
+  - `dotnet test` 63개 통과(반복 로직 11개 신규).

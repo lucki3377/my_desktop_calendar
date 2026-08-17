@@ -6,13 +6,18 @@ public class ReminderPlannerTests
 {
     private static readonly DateTime Now = new(2026, 8, 17, 14, 0, 0);
 
-    private static Schedule At(DateTime startAt, int? reminderMinutes) => new()
+    private static ScheduleOccurrence At(DateTime startAt, int? reminderMinutes)
     {
-        Title = "테스트",
-        StartAt = startAt,
-        EndAt = startAt.AddHours(1),
-        ReminderMinutesBefore = reminderMinutes,
-    };
+        var schedule = new Schedule
+        {
+            Title = "테스트",
+            StartAt = startAt,
+            EndAt = startAt.AddHours(1),
+            ReminderMinutesBefore = reminderMinutes,
+        };
+
+        return new ScheduleOccurrence(schedule, schedule.StartAt, schedule.EndAt);
+    }
 
     [Fact]
     public void 알림_시각이_구간에_들어오면_선택된다()

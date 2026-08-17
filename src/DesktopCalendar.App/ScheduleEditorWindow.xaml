@@ -4,22 +4,23 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         mc:Ignorable="d"
-        Title="일정 편집" Width="340" Height="530"
+        Title="일정 편집" Width="360" Height="620"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize">
     <Grid Margin="14">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />  <!-- 0: 제목 라벨 -->
+            <RowDefinition Height="Auto" />  <!-- 1: 제목 입력 -->
+            <RowDefinition Height="Auto" />  <!-- 2: 종일 -->
+            <RowDefinition Height="Auto" />  <!-- 3: 날짜 -->
+            <RowDefinition Height="Auto" />  <!-- 4: 시간 -->
+            <RowDefinition Height="Auto" />  <!-- 5: 안내문 -->
+            <RowDefinition Height="Auto" />  <!-- 6: 반복 -->
+            <RowDefinition Height="Auto" />  <!-- 7: 색상/알림 라벨 -->
+            <RowDefinition Height="Auto" />  <!-- 8: 색상/알림 -->
+            <RowDefinition Height="Auto" />  <!-- 9: 메모 라벨 -->
+            <RowDefinition Height="*" />     <!-- 10: 메모 -->
+            <RowDefinition Height="Auto" />  <!-- 11: 버튼 -->
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0" Text="제목" Margin="0,0,0,4" />
@@ -63,7 +64,24 @@
         <TextBlock Grid.Row="5" Text="여러 날에 걸친 일정은 종료 날짜를 다르게 지정하세요."
                     Foreground="Gray" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap" />
 
-        <Grid Grid.Row="6" Margin="0,0,0,4">
+        <Grid Grid.Row="6" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="반복" Margin="0,0,0,4" />
+                <ComboBox Name="RecurrenceComboBox" DisplayMemberPath="Label"
+                          SelectionChanged="RecurrenceComboBox_SelectionChanged" />
+            </StackPanel>
+            <StackPanel Grid.Column="2">
+                <TextBlock Text="반복 종료 (비우면 계속)" Margin="0,0,0,4" />
+                <DatePicker Name="RecurrenceUntilPicker" />
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="7" Margin="0,0,0,4">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="12" />
@@ -72,7 +90,7 @@
             <TextBlock Grid.Column="0" Text="색상" />
             <TextBlock Grid.Column="2" Text="알림" />
         </Grid>
-        <Grid Grid.Row="7" Margin="0,0,0,10">
+        <Grid Grid.Row="8" Margin="0,0,0,10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="12" />
@@ -83,11 +101,11 @@
                       DisplayMemberPath="Label" />
         </Grid>
 
-        <TextBlock Grid.Row="8" Text="메모" Margin="0,0,0,4" />
-        <TextBox Grid.Row="9" Name="DescriptionBox" AcceptsReturn="True" TextWrapping="Wrap"
-                 VerticalScrollBarVisibility="Auto" />
+        <TextBlock Grid.Row="9" Text="메모" Margin="0,0,0,4" />
+        <TextBox Grid.Row="10" Name="DescriptionBox" AcceptsReturn="True" TextWrapping="Wrap"
+                 VerticalScrollBarVisibility="Auto" MinHeight="60" />
 
-        <StackPanel Grid.Row="10" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+        <StackPanel Grid.Row="11" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <Button Name="SaveButton" Content="저장" Width="70" Margin="0,0,6,0" Click="SaveButton_Click" IsDefault="True" />
             <Button Name="CancelButton" Content="취소" Width="70" Click="CancelButton_Click" IsCancel="True" />
         </StackPanel>

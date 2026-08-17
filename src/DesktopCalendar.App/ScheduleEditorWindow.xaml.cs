@@ -15,6 +15,9 @@ public partial class ScheduleEditorWindow : Window
     /// <summary>선택한 색(#RRGGBB). null이면 기본색으로 저장한다.</summary>
     private string? _selectedColor;
 
+    /// <summary>기존 일정에서 이어받는 "이 날짜는 건너뛰기" 목록. 편집해도 유지되어야 한다.</summary>
+    private IReadOnlyList<DateOnly> _recurrenceExceptions = [];
+
     public Schedule? Result { get; private set; }
 
     public ScheduleEditorWindow(DateOnly date, Schedule? existing)
@@ -33,6 +36,10 @@ public partial class ScheduleEditorWindow : Window
             StartTimeBox.Text = existing.StartAt.ToString("HH:mm");
             EndTimeBox.Text = existing.EndAt.ToString("HH:mm");
             _selectedColor = existing.Color;
+            _recurrenceExceptions = existing.RecurrenceExceptions;
+
+            if (existing.RecurrenceUntil is { } until)
+                RecurrenceUntilPicker.SelectedDate = until.ToDateTime(TimeOnly.MinValue);
         }
         else
         {
@@ -45,8 +52,45 @@ public partial class ScheduleEditorWindow : Window
 
         BuildColorSwatches();
         BuildReminderOptions(existing?.ReminderMinutesBefore);
+        BuildRecurrenceOptions(existing?.Recurrence ?? RecurrenceType.None);
         UpdateTimeFieldsEnabled();
+        UpdateRecurrenceFieldsEnabled();
     }
+
+    /// <summary>반복 주기 선택지.</summary>
+    private static IReadOnlyList<RecurrenceOption> RecurrenceOptions { get; } =
+    [
+        new("반복 안 함", RecurrenceType.None),
+        new("매일", RecurrenceType.Daily),
+        new("매주", RecurrenceType.Weekly),
+        new("매월", RecurrenceType.Monthly),
+        new("매년", RecurrenceType.Yearly),
+    ];
+
+    private void BuildRecurrenceOptions(RecurrenceType current)
+    {
+        RecurrenceComboBox.ItemsSource = RecurrenceOptions;
+        RecurrenceComboBox.SelectedItem =
+            RecurrenceOptions.FirstOrDefault(o => o.Type == current) ?? RecurrenceOptions[0];
+    }
+
+    private void RecurrenceComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        UpdateRecurrenceFieldsEnabled();
+
+    private void UpdateRecurrenceFieldsEnabled()
+    {
+        // XAML 로드 도중에는 아직 컨트롤이 없을 수 있다.
+        if (RecurrenceUntilPicker is null)
+            return;
+
+        var isRecurring = SelectedRecurrence != RecurrenceType.None;
+        RecurrenceUntilPicker.IsEnabled = isRecurring;
+        if (!isRecurring)
+            RecurrenceUntilPicker.SelectedDate = null;
+    }
+
+    private RecurrenceType SelectedRecurrence =>
+        (RecurrenceComboBox.SelectedItem as RecurrenceOption)?.Type ?? RecurrenceType.None;
 
     /// <summary>알림 선택지. 값이 null이면 알리지 않는다.</summary>
     private static IReadOnlyList<ReminderOption> ReminderOptions { get; } =
@@ -190,6 +234,11 @@ public partial class ScheduleEditorWindow : Window
             IsAllDay = isAllDay,
             Color = _selectedColor,
             ReminderMinutesBefore = (ReminderComboBox.SelectedItem as ReminderOption)?.Minutes,
+            Recurrence = SelectedRecurrence,
+            RecurrenceUntil = SelectedRecurrence == RecurrenceType.None || RecurrenceUntilPicker.SelectedDate is null
+                ? null
+                : DateOnly.FromDateTime(RecurrenceUntilPicker.SelectedDate.Value),
+            RecurrenceExceptions = SelectedRecurrence == RecurrenceType.None ? [] : _recurrenceExceptions,
         };
 
         DialogResult = true;
@@ -199,4 +248,7 @@ public partial class ScheduleEditorWindow : Window
 
     /// <summary>알림 콤보박스 항목. <paramref name="Minutes"/>가 null이면 알림 없음.</summary>
     public sealed record ReminderOption(string Label, int? Minutes);
+
+    /// <summary>반복 콤보박스 항목.</summary>
+    public sealed record RecurrenceOption(string Label, RecurrenceType Type);
 }
