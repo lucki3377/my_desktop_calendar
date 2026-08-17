@@ -24,6 +24,43 @@ public static class KoreanLunarDate
         return isLeapMonth ? $"윤{month}.{day}" : $"{month}.{day}";
     }
 
+    /// <summary>
+    /// 음력 날짜를 양력으로 바꾼다. 그 해에 없는 날짜(없는 윤달, 29일까지인 달의 30일 등)면 null.
+    /// </summary>
+    public static DateOnly? ToSolar(int lunarYear, int lunarMonth, int lunarDay, bool isLeapMonth = false)
+    {
+        if (lunarMonth is < 1 or > 12 || lunarDay is < 1 or > 30)
+            return null;
+
+        try
+        {
+            var leapMonthIndex = Lunar.GetLeapMonth(lunarYear);
+
+            int monthIndex;
+            if (isLeapMonth)
+            {
+                // 그 해의 윤달이 요청한 달이어야 한다 (윤6월은 leapMonthIndex가 7로 온다).
+                if (leapMonthIndex == 0 || leapMonthIndex != lunarMonth + 1)
+                    return null;
+
+                monthIndex = leapMonthIndex;
+            }
+            else
+            {
+                monthIndex = leapMonthIndex > 0 && lunarMonth >= leapMonthIndex ? lunarMonth + 1 : lunarMonth;
+            }
+
+            if (lunarDay > Lunar.GetDaysInMonth(lunarYear, monthIndex))
+                return null;
+
+            return DateOnly.FromDateTime(Lunar.ToDateTime(lunarYear, monthIndex, lunarDay, 0, 0, 0, 0));
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>음력 연/월/일과 윤달 여부. 변환할 수 없으면 null.</summary>
     public static (int Year, int Month, int Day, bool IsLeapMonth)? Convert(DateOnly date)
     {

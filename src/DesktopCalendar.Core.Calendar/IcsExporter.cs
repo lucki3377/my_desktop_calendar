@@ -55,7 +55,13 @@ public static class IcsExporter
             AppendLine(builder, $"DTEND:{FormatLocal(schedule.EndAt)}");
         }
 
-        if (schedule.IsRecurring)
+        if (schedule.Recurrence == RecurrenceType.LunarYearly)
+        {
+            // 음력 반복은 RRULE로 표현할 수 없으므로 앞으로 몇 해치 날짜를 직접 적어 준다.
+            if (BuildLunarDates(schedule) is { } lunarDates)
+                AppendLine(builder, lunarDates);
+        }
+        else if (schedule.IsRecurring)
         {
             AppendLine(builder, BuildRecurrenceRule(schedule));
 
@@ -82,6 +88,31 @@ public static class IcsExporter
             rule += $";UNTIL={until:yyyyMMdd}T235959";
 
         return rule;
+    }
+
+    /// <summary>음력 반복 일정을 몇 해치 앞까지 내보낼지.</summary>
+    private const int LunarExportYears = 20;
+
+    /// <summary>
+    /// 음력 매년 반복은 규칙(RRULE)으로 적을 수 없어서, 앞으로 열릴 날짜들을 RDATE로 나열한다.
+    /// 첫 회차는 DTSTART가 이미 담고 있으므로 뺀다.
+    /// </summary>
+    private static string? BuildLunarDates(Schedule schedule)
+    {
+        var from = schedule.StartAt.AddDays(1);
+        var to = schedule.StartAt.AddYears(LunarExportYears);
+
+        var dates = RecurrenceExpander.Expand(schedule, from, to)
+            .Select(o => schedule.IsAllDay
+                ? o.StartAt.ToString("yyyyMMdd")
+                : o.StartAt.ToString("yyyyMMdd'T'HHmmss"))
+            .ToList();
+
+        if (dates.Count == 0)
+            return null;
+
+        var prefix = schedule.IsAllDay ? "RDATE;VALUE=DATE:" : "RDATE:";
+        return prefix + string.Join(',', dates);
     }
 
     private static string BuildExceptionDates(Schedule schedule)

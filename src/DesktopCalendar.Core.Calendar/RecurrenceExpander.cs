@@ -111,6 +111,22 @@ public static class RecurrenceExpander
                     : new DateTime(year, origin.Month, origin.Day) + origin.TimeOfDay;
             }
 
+            case RecurrenceType.LunarYearly:
+            {
+                var lunar = KoreanLunarDate.Convert(DateOnly.FromDateTime(origin));
+                if (lunar is null)
+                    return null;
+
+                var (lunarYear, month, day, isLeapMonth) = lunar.Value;
+                var target = lunarYear + index;
+
+                // 윤달에 잡힌 일정인데 그 해에 같은 윤달이 없으면 평달로 지낸다 (제사 관행과 같은 처리).
+                var solar = KoreanLunarDate.ToSolar(target, month, day, isLeapMonth)
+                    ?? (isLeapMonth ? KoreanLunarDate.ToSolar(target, month, day, isLeapMonth: false) : null);
+
+                return solar?.ToDateTime(TimeOnly.MinValue).Add(origin.TimeOfDay);
+            }
+
             default:
                 return index == 0 ? origin : null;
         }
@@ -132,7 +148,8 @@ public static class RecurrenceExpander
             RecurrenceType.Daily => (int)(target - schedule.StartAt).TotalDays,
             RecurrenceType.Weekly => (int)((target - schedule.StartAt).TotalDays / 7),
             RecurrenceType.Monthly => ((target.Year - schedule.StartAt.Year) * 12) + target.Month - schedule.StartAt.Month,
-            RecurrenceType.Yearly => target.Year - schedule.StartAt.Year,
+            // 음력 연도는 양력 연도와 거의 나란히 가므로 연도 차이로 어림해도 된다.
+            RecurrenceType.Yearly or RecurrenceType.LunarYearly => target.Year - schedule.StartAt.Year,
             _ => 0,
         };
 

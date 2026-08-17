@@ -10,6 +10,9 @@ public enum RecurrenceType
     Weekly,
     Monthly,
     Yearly,
+
+    /// <summary>음력 기준 매년 반복 (음력 생일·제사 등). 양력 날짜는 해마다 달라진다.</summary>
+    LunarYearly,
 }
 
 public sealed class Schedule

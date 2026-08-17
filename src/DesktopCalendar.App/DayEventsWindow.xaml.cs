@@ -98,6 +98,7 @@ public partial class DayEventsWindow : Window
         RecurrenceType.Weekly => "  (매주)",
         RecurrenceType.Monthly => "  (매월)",
         RecurrenceType.Yearly => "  (매년)",
+        RecurrenceType.LunarYearly => "  (매년 음력)",
         _ => string.Empty,
     };
 

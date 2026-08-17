@@ -55,6 +55,7 @@ public partial class ScheduleEditorWindow : Window
         BuildRecurrenceOptions(existing?.Recurrence ?? RecurrenceType.None);
         UpdateTimeFieldsEnabled();
         UpdateRecurrenceFieldsEnabled();
+        UpdateLunarHint();
     }
 
     /// <summary>반복 주기 선택지.</summary>
@@ -65,6 +66,7 @@ public partial class ScheduleEditorWindow : Window
         new("매주", RecurrenceType.Weekly),
         new("매월", RecurrenceType.Monthly),
         new("매년", RecurrenceType.Yearly),
+        new("매년 (음력)", RecurrenceType.LunarYearly),
     ];
 
     private void BuildRecurrenceOptions(RecurrenceType current)
@@ -165,6 +167,31 @@ public partial class ScheduleEditorWindow : Window
         // 종료 날짜가 비어있거나 시작 날짜보다 이전이면 시작 날짜로 맞춰준다 (다일 일정은 사용자가 직접 뒤로 조정)
         if (EndDatePicker.SelectedDate is not DateTime endDate || endDate < startDate)
             EndDatePicker.SelectedDate = startDate;
+
+        UpdateLunarHint();
+    }
+
+    /// <summary>시작 날짜가 음력으로 며칠인지 아래에 작게 보여준다.</summary>
+    private void UpdateLunarHint()
+    {
+        if (LunarHintText is null)
+            return;
+
+        LunarHintText.Text = StartDatePicker.SelectedDate is DateTime date
+            && KoreanLunarDate.Format(DateOnly.FromDateTime(date)) is { } lunar
+            ? $"음력 {lunar}"
+            : string.Empty;
+    }
+
+    private void LunarPickButton_Click(object sender, RoutedEventArgs e)
+    {
+        var current = StartDatePicker.SelectedDate is DateTime date
+            ? DateOnly.FromDateTime(date)
+            : DateOnly.FromDateTime(DateTime.Today);
+
+        var dialog = new LunarDatePickerDialog(current) { Owner = this };
+        if (dialog.ShowDialog() == true && dialog.SelectedSolarDate is { } solar)
+            StartDatePicker.SelectedDate = solar.ToDateTime(TimeOnly.MinValue);
     }
 
     private void IsAllDayCheckBox_CheckedChanged(object sender, RoutedEventArgs e) => UpdateTimeFieldsEnabled();

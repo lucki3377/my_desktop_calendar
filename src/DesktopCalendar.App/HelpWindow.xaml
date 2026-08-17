@@ -164,6 +164,11 @@
                         <TextBlock Style="{StaticResource Body}" Text="칸에는 최대 3개까지 보이고 넘치면 '+N개'로 표시됩니다. 날짜를 클릭하면 전부 볼 수 있습니다." />
                         <TextBlock Style="{StaticResource Body}" Text="파란 칩은 이 앱에 저장한 일정, 초록 칩은 구글에서 가져온 일정입니다. 구글 일정은 읽기 전용입니다." />
 
+                        <TextBlock Style="{StaticResource StepHeader}" Text="음력 일정 (생일·제사)" />
+                        <TextBlock Style="{StaticResource Body}" Text="일정 편집 창의 [음력으로...] 버튼을 누르면 음력 날짜를 골라 등록할 수 있습니다. 고른 음력이 양력으로 며칠인지 바로 보여줍니다." />
+                        <TextBlock Style="{StaticResource Body}" Text="반복을 [매년 (음력)]으로 두면 해마다 같은 음력 날짜에 열립니다. 양력 날짜는 매년 달라집니다." />
+                        <TextBlock Style="{StaticResource Body}" Text="우클릭 → [음력 표시]를 켜면 달력 각 날짜 옆에 음력이 작게 표시됩니다." />
+
                         <TextBlock Style="{StaticResource StepHeader}" Text="달 이동" />
                         <TextBlock Style="{StaticResource Body}" Text="◀ ▶ 로 한 달씩 이동하고, 가운데 '2026년 8월 ▾'을 클릭하면 년/월을 직접 고를 수 있습니다." />
 

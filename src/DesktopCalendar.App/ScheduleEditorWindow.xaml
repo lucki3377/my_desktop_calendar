@@ -36,8 +36,14 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0">
-                <TextBlock Text="시작 날짜" Margin="0,0,0,4" />
+                <DockPanel Margin="0,0,0,4" LastChildFill="False">
+                    <TextBlock DockPanel.Dock="Left" Text="시작 날짜" />
+                    <!-- 음력 생일·제사처럼 음력으로 날짜를 아는 경우를 위한 입력 창 -->
+                    <Button DockPanel.Dock="Right" Name="LunarPickButton" Content="음력으로..."
+                            Padding="6,0" FontSize="11" Click="LunarPickButton_Click" />
+                </DockPanel>
                 <DatePicker Name="StartDatePicker" SelectedDateChanged="StartDatePicker_SelectedDateChanged" />
+                <TextBlock Name="LunarHintText" FontSize="10" Foreground="Gray" Margin="0,3,0,0" />
             </StackPanel>
             <StackPanel Grid.Column="2">
                 <TextBlock Text="종료 날짜" Margin="0,0,0,4" />

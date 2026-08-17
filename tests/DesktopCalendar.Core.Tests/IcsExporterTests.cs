@@ -84,6 +84,24 @@ public class IcsExporterTests
     }
 
     [Fact]
+    public void 음력_반복은_RRULE_대신_RDATE로_나간다()
+    {
+        var schedule = Make();
+        schedule.StartAt = new DateTime(2026, 2, 17, 9, 0, 0); // 음력 1월 1일
+        schedule.EndAt = schedule.StartAt.AddHours(1);
+        schedule.Recurrence = RecurrenceType.LunarYearly;
+
+        var lines = Lines(IcsExporter.Export([schedule], Stamp));
+
+        Assert.DoesNotContain(lines, l => l.StartsWith("RRULE"));
+
+        // 접힌 줄을 다시 이어 붙여서 확인한다
+        var joined = string.Concat(lines.Select(l => l.StartsWith(' ') ? l[1..] : "\n" + l));
+        Assert.Contains("RDATE:", joined);
+        Assert.Contains("20270207T090000", joined); // 2027년 설날
+    }
+
+    [Fact]
     public void 반복이_아니면_RRULE이_없다()
     {
         Assert.DoesNotContain(Lines(IcsExporter.Export([Make()], Stamp)), l => l.StartsWith("RRULE"));
