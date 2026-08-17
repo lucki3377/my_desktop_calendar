@@ -21,23 +21,44 @@ public sealed class ScheduleRepository
     private void EnsureSchema()
     {
         using var connection = Open();
-        using var command = connection.CreateCommand();
-        command.CommandText =
-            """
-            CREATE TABLE IF NOT EXISTS Schedule (
-                Id          TEXT PRIMARY KEY NOT NULL,
-                Title       TEXT NOT NULL,
-                Description TEXT NULL,
-                StartAt     TEXT NOT NULL,
-                EndAt       TEXT NOT NULL,
-                IsAllDay    INTEGER NOT NULL,
-                Color       TEXT NULL,
-                CreatedAt   TEXT NOT NULL,
-                UpdatedAt   TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS IX_Schedule_StartAt ON Schedule(StartAt);
-            """;
-        command.ExecuteNonQuery();
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText =
+                """
+                CREATE TABLE IF NOT EXISTS Schedule (
+                    Id                    TEXT PRIMARY KEY NOT NULL,
+                    Title                 TEXT NOT NULL,
+                    Description           TEXT NULL,
+                    StartAt               TEXT NOT NULL,
+                    EndAt                 TEXT NOT NULL,
+                    IsAllDay              INTEGER NOT NULL,
+                    Color                 TEXT NULL,
+                    ReminderMinutesBefore INTEGER NULL,
+                    CreatedAt             TEXT NOT NULL,
+                    UpdatedAt             TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS IX_Schedule_StartAt ON Schedule(StartAt);
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        // 이전 버전에서 만들어진 DB에는 알림 열이 없다 (2026-08-17 추가).
+        AddColumnIfMissing(connection, "ReminderMinutesBefore", "INTEGER NULL");
+    }
+
+    private static void AddColumnIfMissing(SqliteConnection connection, string columnName, string columnType)
+    {
+        using (var check = connection.CreateCommand())
+        {
+            check.CommandText = "SELECT 1 FROM pragma_table_info('Schedule') WHERE name = $name;";
+            check.Parameters.AddWithValue("$name", columnName);
+            if (check.ExecuteScalar() is not null)
+                return;
+        }
+
+        using var alter = connection.CreateCommand();
+        alter.CommandText = $"ALTER TABLE Schedule ADD COLUMN {columnName} {columnType};";
+        alter.ExecuteNonQuery();
     }
 
     public IReadOnlyList<Schedule> GetByMonth(int year, int month)
@@ -60,7 +81,7 @@ public sealed class ScheduleRepository
         using var command = connection.CreateCommand();
         command.CommandText =
             """
-            SELECT Id, Title, Description, StartAt, EndAt, IsAllDay, Color, CreatedAt, UpdatedAt
+            SELECT Id, Title, Description, StartAt, EndAt, IsAllDay, Color, CreatedAt, UpdatedAt, ReminderMinutesBefore
             FROM Schedule
             WHERE StartAt < $rangeEnd AND EndAt >= $rangeStart
             ORDER BY StartAt;
@@ -85,8 +106,8 @@ public sealed class ScheduleRepository
         using var command = connection.CreateCommand();
         command.CommandText =
             """
-            INSERT INTO Schedule (Id, Title, Description, StartAt, EndAt, IsAllDay, Color, CreatedAt, UpdatedAt)
-            VALUES ($id, $title, $description, $startAt, $endAt, $isAllDay, $color, $createdAt, $updatedAt);
+            INSERT INTO Schedule (Id, Title, Description, StartAt, EndAt, IsAllDay, Color, ReminderMinutesBefore, CreatedAt, UpdatedAt)
+            VALUES ($id, $title, $description, $startAt, $endAt, $isAllDay, $color, $reminderMinutesBefore, $createdAt, $updatedAt);
             """;
         BindParameters(command, schedule);
         command.ExecuteNonQuery();
@@ -103,7 +124,8 @@ public sealed class ScheduleRepository
             """
             UPDATE Schedule
             SET Title = $title, Description = $description, StartAt = $startAt, EndAt = $endAt,
-                IsAllDay = $isAllDay, Color = $color, UpdatedAt = $updatedAt
+                IsAllDay = $isAllDay, Color = $color, ReminderMinutesBefore = $reminderMinutesBefore,
+                UpdatedAt = $updatedAt
             WHERE Id = $id;
             """;
         BindParameters(command, schedule);
@@ -135,6 +157,7 @@ public sealed class ScheduleRepository
         command.Parameters.AddWithValue("$endAt", ToDbString(schedule.EndAt));
         command.Parameters.AddWithValue("$isAllDay", schedule.IsAllDay ? 1 : 0);
         command.Parameters.AddWithValue("$color", (object?)schedule.Color ?? DBNull.Value);
+        command.Parameters.AddWithValue("$reminderMinutesBefore", (object?)schedule.ReminderMinutesBefore ?? DBNull.Value);
         command.Parameters.AddWithValue("$createdAt", ToDbString(schedule.CreatedAt));
         command.Parameters.AddWithValue("$updatedAt", ToDbString(schedule.UpdatedAt));
     }
@@ -150,7 +173,33 @@ public sealed class ScheduleRepository
         Color = reader.IsDBNull(6) ? null : reader.GetString(6),
         CreatedAt = FromDbString(reader.GetString(7)),
         UpdatedAt = FromDbString(reader.GetString(8)),
+        ReminderMinutesBefore = reader.IsDBNull(9) ? null : reader.GetInt32(9),
     };
+
+    /// <summary>
+    /// 알림이 설정된 일정 중 시작 시각이 주어진 구간에 있는 것들. 알림 서비스가 주기적으로 훑는 용도다.
+    /// </summary>
+    public IReadOnlyList<Schedule> GetWithReminderStartingBetween(DateTime fromStartAt, DateTime toStartAt)
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT Id, Title, Description, StartAt, EndAt, IsAllDay, Color, CreatedAt, UpdatedAt, ReminderMinutesBefore
+            FROM Schedule
+            WHERE ReminderMinutesBefore IS NOT NULL AND StartAt >= $from AND StartAt <= $to
+            ORDER BY StartAt;
+            """;
+        command.Parameters.AddWithValue("$from", ToDbString(fromStartAt));
+        command.Parameters.AddWithValue("$to", ToDbString(toStartAt));
+
+        var results = new List<Schedule>();
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+            results.Add(ReadSchedule(reader));
+
+        return results;
+    }
 
     private static string ToDbString(DateTime value) => value.ToString("o", CultureInfo.InvariantCulture);
 

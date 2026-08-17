@@ -205,6 +205,9 @@ public partial class WidgetWindow : Window
         RenderMonth();
     }
 
+    /// <summary>트레이 메뉴에서도 같은 창을 열 수 있게 공개해 둔다.</summary>
+    public void OpenAppearanceDialog() => AppearanceMenuItem_Click(this, new RoutedEventArgs());
+
     private void AppearanceMenuItem_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new AppearanceDialog(_theme);

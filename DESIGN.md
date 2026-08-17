@@ -154,6 +154,15 @@ Core.Desktop  Core.Calendar  Core.Holiday   Core.Google    Core.Storage
   - 일정 칩은 자체 배경색 위에 흰 글씨라 테마와 무관하게 그대로 둔다
 - **도움말**: 우클릭 메뉴 "도움말..." → `HelpWindow`(탭 3개: 구글 캘린더 연동 / 공휴일 API 키 / 위젯 사용법). 외부 서비스 발급 절차를 단계별로 안내하고, 콘솔·포털 링크는 기본 브라우저로 열린다. `GoogleSettingsWindow`와 `ApiKeyDialog`의 "발급 방법 도움말" 버튼에서 해당 탭이 바로 열린다 (2026-08-17 추가, 사용자 요청)
 
+### 4.10 일정 알림 (2026-08-17 추가)
+
+- 일정마다 "시작 몇 분 전에 알릴지"를 고른다(`Schedule.ReminderMinutesBefore`, null이면 알림 없음). 선택지: 시작할 때(0) / 5·10·30분 / 1·2시간 / 1일 전
+- 알림 수단은 **트레이 아이콘의 풍선 알림**(`TaskbarIcon.ShowBalloonTip`). 위젯은 바탕화면에 박혀 있어 창을 띄우면 오히려 방해되므로 풍선을 쓴다
+- `ReminderService`(App)가 `DispatcherTimer`로 30초마다 확인한다. 타이머가 정확한 시각에 깨어난다는 보장이 없으므로 "시각이 같은지"가 아니라 **"지난 확인 시점 ~ 지금" 구간에 알림 시각이 들어왔는지**로 판단한다 → 30초 간격이어도 알림을 놓치지 않고, 구간을 반열림으로 둬서 중복 알림도 없다
+- 마지막 확인 시점은 `Reminder.LastCheckedAt` 설정에 저장한다. 앱이 오래 꺼져 있었으면 밀린 알림이 쏟아지지 않도록 최대 10분까지만 소급한다(`ReminderPlanner.ClampLookback`)
+- 판단 로직은 `ReminderPlanner`(Core.Calendar, WPF 비의존 순수 로직)에 두고 단위테스트로 검증한다
+- 구글에서 가져온 일정은 알림 대상이 아니다 (읽기 전용 캐시이고, 알림은 구글 쪽에서 이미 처리됨)
+
 ### 4.8 설정 저장
 
 - `Settings` 테이블(or 단순 JSON 파일 `settings.json`) — SQLite에 key-value로 저장 권장(단일 저장소로 통일)
@@ -181,6 +190,7 @@ Schedule (로컬 일정)
 - EndAt: datetime
 - IsAllDay: bool
 - Color: string?
+- ReminderMinutesBefore: int?   (2026-08-17 추가, null이면 알림 없음)
 - CreatedAt / UpdatedAt: datetime
 
 Holiday (공휴일 캐시)
@@ -283,7 +293,7 @@ Settings (key-value)
 - [x] `ShowGoogleEvents` 토글 및 위젯 렌더링에 병합 반영 (구글 일정은 초록 칩으로 구분)
 
 ### Phase 6 — 마무리
-- [ ] 트레이 아이콘 + 컨텍스트 메뉴(설정/종료)
+- [x] 트레이 아이콘 + 컨텍스트 메뉴(달력 보이기·숨기기 / 색상·투명도 / 도움말 / 종료) — 2026-08-17
 - [ ] Windows 시작 시 자동 실행 등록/해제
 - [ ] 설정 창 UI 정리 (전체 항목 한 곳에서 관리)
 - [ ] self-contained exe 빌드 (`dotnet publish -c Release --self-contained`), 4.9 조치 적용 후 VirusTotal 점검
@@ -359,3 +369,10 @@ Settings (key-value)
   - `ScheduleEditorWindow`에 색상 스와치 8종(기본/빨강/주황/황토/보라/분홍/청록/회색) 추가, 선택된 것에 테두리 표시. 편집 시 기존 색을 불러오도록 수정(위 버그 해결).
   - `DayEventsWindow` 목록에도 `ItemTemplate`으로 색 점을 붙여 어떤 일정인지 바로 구분되게 함.
   - **실행 검증**: 8/20에 "보라 일정"을 보라색으로 저장 → 달력 칸 칩과 날짜 팝업 목록이 모두 보라로 표시됨(스크린샷), DB에 `Color=#8A5FBF` 저장 확인. 이어서 색을 건드리지 않고 수정→저장했을 때도 `#8A5FBF`가 유지되는 것을 확인(버그 회귀 방지). 테스트 일정은 삭제함.
+- **2026-08-17**: 트레이 아이콘(Phase 6) + 일정 알림 추가 (추천 기능 2번).
+  - **트레이 아이콘**: `Assets/calendar.ico`를 새로 만들어(16/24/32/48/64px 멀티사이즈) 트레이·실행파일 아이콘으로 사용. 아이콘은 스크립트로 생성했고, **PNG를 품은 ICO는 `System.Drawing.Icon`이 못 읽어** 고전 32bpp DIB 형식으로 인코딩함. `App.xaml`에 `TaskbarIcon` 리소스 정의(메뉴: 달력 보이기·숨기기 / 색상·투명도 / 도움말 / 종료), 좌클릭으로 위젯 표시 토글. 위젯을 숨겨도 앱이 살아 있도록 `ShutdownMode.OnExplicitShutdown`으로 변경.
+  - **패키지 교체**: `Hardcodet.NotifyIcon.Wpf.NetCore` 1.1.5는 `TaskbarIcon` 생성자에서 `MissingMethodException`(`WindowMessageSink.add_DpiChanged`)으로 앱이 즉시 크래시함 — 패키지 내부 버전 불일치. 공식 패키지 `Hardcodet.NotifyIcon.Wpf` 2.0.1로 교체해 해결.
+  - **알림**: `Schedule.ReminderMinutesBefore` 열 추가(기존 DB용 `ALTER TABLE` 마이그레이션 포함 — `pragma_table_info`로 열 존재를 확인), `ScheduleEditorWindow`에 알림 콤보(없음/시작할 때/5·10·30분/1·2시간/1일 전), `ReminderPlanner`(순수 로직) + `ReminderService`(30초 주기 확인 후 트레이 풍선). 자세한 설계는 4.10 참조.
+  - **실행 검증**: 트레이 아이콘 표시 확인, 알림 콤보 드롭다운 렌더링 확인(스크린샷). 시작 2분 뒤 일정을 "시작할 때" 알림으로 저장(`Reminder=0` DB 확인) → 실제로 풍선 알림이 뜨는 것까지 확인. 테스트 일정은 삭제함.
+  - 참고: 콤보 항목의 UIA 이름이 레코드의 `ToString()`(`ReminderOption { Label = ... }`)으로 나오지만 화면 표시는 `DisplayMemberPath` 덕에 정상이다 — UI Automation으로 항목을 고를 때는 이름에 `Label = ...`이 포함된 것으로 찾아야 한다.
+  - `dotnet test` 52개 통과(알림 로직 14개 신규).

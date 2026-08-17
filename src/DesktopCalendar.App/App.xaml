@@ -1,8 +1,28 @@
-﻿<Application x:Class="DesktopCalendar.App.App"
+<Application x:Class="DesktopCalendar.App.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:tb="http://www.hardcodet.net/taskbar"
              xmlns:local="clr-namespace:DesktopCalendar.App">
     <Application.Resources>
-
+        <!--
+            트레이 아이콘 (DESIGN.md Phase 6).
+            위젯은 바탕화면에 박혀 있어 태스크바에 안 나오므로, 앱을 종료하거나 설정을 여는
+            창구가 트레이 아이콘이다. 알림 풍선도 여기서 띄운다.
+        -->
+        <tb:TaskbarIcon x:Key="TrayIcon"
+                        IconSource="Assets/calendar.ico"
+                        ToolTipText="바탕화면 달력"
+                        TrayLeftMouseUp="TrayIcon_LeftMouseUp">
+            <tb:TaskbarIcon.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="달력 보이기 / 숨기기" Click="TrayToggleWidget_Click" />
+                    <Separator />
+                    <MenuItem Header="색상 / 투명도..." Click="TrayAppearance_Click" />
+                    <MenuItem Header="도움말..." Click="TrayHelp_Click" />
+                    <Separator />
+                    <MenuItem Header="종료" Click="TrayExit_Click" />
+                </ContextMenu>
+            </tb:TaskbarIcon.ContextMenu>
+        </tb:TaskbarIcon>
     </Application.Resources>
 </Application>

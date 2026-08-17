@@ -63,8 +63,25 @@
         <TextBlock Grid.Row="5" Text="여러 날에 걸친 일정은 종료 날짜를 다르게 지정하세요."
                     Foreground="Gray" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap" />
 
-        <TextBlock Grid.Row="6" Text="색상" Margin="0,0,0,4" />
-        <WrapPanel Grid.Row="7" Name="ColorPanel" Margin="0,0,0,10" />
+        <Grid Grid.Row="6" Margin="0,0,0,4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="색상" />
+            <TextBlock Grid.Column="2" Text="알림" />
+        </Grid>
+        <Grid Grid.Row="7" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <WrapPanel Grid.Column="0" Name="ColorPanel" VerticalAlignment="Center" />
+            <ComboBox Grid.Column="2" Name="ReminderComboBox" VerticalAlignment="Center"
+                      DisplayMemberPath="Label" />
+        </Grid>
 
         <TextBlock Grid.Row="8" Text="메모" Margin="0,0,0,4" />
         <TextBox Grid.Row="9" Name="DescriptionBox" AcceptsReturn="True" TextWrapping="Wrap"

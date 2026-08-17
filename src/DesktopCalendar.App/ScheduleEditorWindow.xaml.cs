@@ -44,7 +44,28 @@ public partial class ScheduleEditorWindow : Window
         }
 
         BuildColorSwatches();
+        BuildReminderOptions(existing?.ReminderMinutesBefore);
         UpdateTimeFieldsEnabled();
+    }
+
+    /// <summary>알림 선택지. 값이 null이면 알리지 않는다.</summary>
+    private static IReadOnlyList<ReminderOption> ReminderOptions { get; } =
+    [
+        new("알림 없음", null),
+        new("시작할 때", 0),
+        new("5분 전", 5),
+        new("10분 전", 10),
+        new("30분 전", 30),
+        new("1시간 전", 60),
+        new("2시간 전", 120),
+        new("1일 전", 24 * 60),
+    ];
+
+    private void BuildReminderOptions(int? currentMinutes)
+    {
+        ReminderComboBox.ItemsSource = ReminderOptions;
+        ReminderComboBox.SelectedItem =
+            ReminderOptions.FirstOrDefault(o => o.Minutes == currentMinutes) ?? ReminderOptions[0];
     }
 
     private void BuildColorSwatches()
@@ -168,10 +189,14 @@ public partial class ScheduleEditorWindow : Window
             EndAt = endAt,
             IsAllDay = isAllDay,
             Color = _selectedColor,
+            ReminderMinutesBefore = (ReminderComboBox.SelectedItem as ReminderOption)?.Minutes,
         };
 
         DialogResult = true;
     }
 
     private void CancelButton_Click(object sender, RoutedEventArgs e) => DialogResult = false;
+
+    /// <summary>알림 콤보박스 항목. <paramref name="Minutes"/>가 null이면 알림 없음.</summary>
+    public sealed record ReminderOption(string Label, int? Minutes);
 }
