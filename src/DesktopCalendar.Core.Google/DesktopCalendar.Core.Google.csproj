@@ -11,7 +11,8 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- DPAPI(ProtectedData)는 Windows 전용이므로 -windows TFM으로 둔다 (CA1416 경고 방지) -->
+    <TargetFramework>net8.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>

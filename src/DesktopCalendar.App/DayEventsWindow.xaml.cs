@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Windows;
 using DesktopCalendar.Core.Calendar;
+using DesktopCalendar.Core.Google;
 using DesktopCalendar.Core.Holiday;
 
 namespace DesktopCalendar.App;
@@ -13,12 +14,20 @@ public partial class DayEventsWindow : Window
     private readonly ScheduleRepository _repository;
     private readonly HolidayRepository _holidayRepository;
 
-    public DayEventsWindow(DateOnly date, ScheduleRepository repository, HolidayRepository holidayRepository)
+    /// <summary>구글에서 가져온 일정(읽기 전용). 표시 토글이 꺼져 있으면 비어 있다.</summary>
+    private readonly IReadOnlyList<GoogleEvent> _googleEvents;
+
+    public DayEventsWindow(
+        DateOnly date,
+        ScheduleRepository repository,
+        HolidayRepository holidayRepository,
+        IReadOnlyList<GoogleEvent>? googleEvents = null)
     {
         InitializeComponent();
         _date = date;
         _repository = repository;
         _holidayRepository = holidayRepository;
+        _googleEvents = googleEvents ?? [];
 
         DateTitleText.Text = date.ToDateTime(TimeOnly.MinValue).ToString("yyyy년 M월 d일 (ddd)", Korean);
         LoadList();
@@ -61,20 +70,24 @@ public partial class DayEventsWindow : Window
 
     private void LoadList()
     {
-        var schedules = _repository.GetByDate(_date);
-        ScheduleListBox.ItemsSource = schedules.Select(s => new ScheduleListItem(s, Format(s))).ToList();
+        var entries = _repository.GetByDate(_date)
+            .Select(s => new ScheduleListItem(s, Format(s.StartAt, s.EndAt, s.IsAllDay, s.Title)))
+            .ToList();
+
+        entries.AddRange(_googleEvents.Select(g => new ScheduleListItem(
+            null, "[구글] " + Format(g.StartAt, g.EndAt, g.IsAllDay, g.Title))));
+
+        ScheduleListBox.ItemsSource = entries;
     }
 
-    private static string Format(Schedule schedule)
+    private static string Format(DateTime startAt, DateTime endAt, bool isAllDay, string title)
     {
-        var isMultiDay = schedule.StartAt.Date != schedule.EndAt.Date;
-        var rangePrefix = isMultiDay
-            ? $"{schedule.StartAt:M/d}~{schedule.EndAt:M/d} "
-            : string.Empty;
+        var isMultiDay = startAt.Date != endAt.Date;
+        var rangePrefix = isMultiDay ? $"{startAt:M/d}~{endAt:M/d} " : string.Empty;
 
-        return schedule.IsAllDay
-            ? $"{rangePrefix}[종일] {schedule.Title}"
-            : $"{rangePrefix}{schedule.StartAt:HH:mm}~{schedule.EndAt:HH:mm}  {schedule.Title}";
+        return isAllDay
+            ? $"{rangePrefix}[종일] {title}"
+            : $"{rangePrefix}{startAt:HH:mm}~{endAt:HH:mm}  {title}";
     }
 
     private void AddButton_Click(object sender, RoutedEventArgs e)
@@ -95,6 +108,12 @@ public partial class DayEventsWindow : Window
             return;
         }
 
+        if (item.Schedule is null)
+        {
+            ShowGoogleReadOnlyNotice();
+            return;
+        }
+
         var editor = new ScheduleEditorWindow(_date, item.Schedule);
         if (editor.ShowDialog() == true && editor.Result is not null)
         {
@@ -111,6 +130,12 @@ public partial class DayEventsWindow : Window
             return;
         }
 
+        if (item.Schedule is null)
+        {
+            ShowGoogleReadOnlyNotice();
+            return;
+        }
+
         var confirm = MessageBox.Show($"'{item.Schedule.Title}' 일정을 삭제할까요?", "삭제 확인",
             MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (confirm == MessageBoxResult.Yes)
@@ -122,7 +147,13 @@ public partial class DayEventsWindow : Window
 
     private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
 
-    private sealed record ScheduleListItem(Schedule Schedule, string Display)
+    private static void ShowGoogleReadOnlyNotice() =>
+        MessageBox.Show(
+            "구글 캘린더에서 가져온 일정은 읽기 전용입니다. 구글 캘린더에서 직접 수정하세요.",
+            "안내", MessageBoxButton.OK, MessageBoxImage.Information);
+
+    /// <summary><paramref name="Schedule"/>이 null이면 구글에서 가져온 읽기 전용 항목이다.</summary>
+    private sealed record ScheduleListItem(Schedule? Schedule, string Display)
     {
         public override string ToString() => Display;
     }

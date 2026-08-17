@@ -9,10 +9,10 @@
 윈도우 바탕화면(데스크톱 아이콘 뒤, 배경화면 위)에 항상 떠 있는 달력 위젯 프로그램.
 
 ### 요구사항 (원본)
-- [x] 한국 공휴일 정보를 가져와서 휴일 표시 (주말 / 공휴일 / 임시공휴일) — Phase 3 완료
+- [x] 한국 공휴일 정보를 가져와서 휴일 표시 (주말 / 공휴일 / 임시공휴일) — Phase 3 완료, 2026-08-17 앱 내장 계산 추가
 - [x] 일정 등록 / 수정 / 삭제 (로컬) — Phase 2 완료 (여러 날에 걸친 일정도 지원, 2026-07-31 추가)
-- [ ] 구글 캘린더 연동 기능 제공
-- [ ] 연동된(구글) 일정의 표시 여부를 설정으로 켜고 끌 수 있음
+- [x] 구글 캘린더 연동 기능 제공 — Phase 5 완료 (2026-08-17)
+- [x] 연동된(구글) 일정의 표시 여부를 설정으로 켜고 끌 수 있음 — Phase 5 완료 (2026-08-17)
 - [x] D-day 계산 기능 — Phase 4 완료
 
 ## 2. 결정 사항 (Decisions)
@@ -32,6 +32,7 @@
 | 위젯 클릭 동작 | **위젯 영역은 클릭 가능(일정 편집), 그 외 데스크톱 클릭은 통과 안 됨** | 완전 click-through 미구현 — 위젯이 차지하는 사각형 영역은 일반 창처럼 동작, 그 바깥은 애초에 위젯이 없으므로 아이콘 클릭에 영향 없음 |
 | 가독성 확보 | **반투명 패널 배경**(반투명 검정/흰색 + 그 위에 텍스트) | 투명도는 설정에서 조절 가능하게 함 |
 | 로컬↔구글 동기화 방향 | **단방향 (구글 → 로컬 조회만)** | 로컬 일정을 구글로 올리지 않음. 4.4/4.6과 일치 |
+| 공휴일 데이터 출처 | **앱 내장 계산 + 공공데이터 API 병행** (2026-08-17 결정) | API 키가 없어도 공휴일이 바로 보이도록 앱이 직접 계산(`KoreanHolidayCalculator`). 키를 넣으면 API 데이터가 내장본을 덮어써서 임시공휴일까지 반영. 우선순위: 수동 > API > 내장 |
 
 ## 3. 전체 아키텍처
 
@@ -73,6 +74,24 @@ Core.Desktop  Core.Calendar  Core.Holiday   Core.Google    Core.Storage
 
 ### 4.2 한국 공휴일 연동
 
+공휴일은 **앱 내장 계산**을 기본으로 하고, API 키가 있으면 그 데이터로 덮어쓴다 (2026-08-17 변경).
+
+**(a) 앱 내장 계산 — `KoreanHolidayCalculator` (Core.Holiday)**
+- 근거: "관공서의 공휴일에 관한 규정". API 키/인터넷 없이도 공휴일이 바로 표시된다.
+- 양력 고정: 1월 1일, 삼일절, 어린이날, 현충일, 광복절, 개천절, 한글날, 기독탄신일
+- 음력: .NET `KoreanLunisolarCalendar`로 양력 환산 — 설날(음력 1/1 ± 1일), 부처님오신날(음력 4/8), 추석(음력 8/15 ± 1일). 윤달이 앞에 끼면 월 인덱스가 밀리는 것을 보정함
+- 대체공휴일 규칙(공휴일별로 판정이 다름):
+  - 설날·추석 연휴: **일요일** 또는 다른 공휴일과 겹칠 때 (토요일은 해당 없음)
+  - 어린이날: 토·일요일 **또는 다른 공휴일**과 겹칠 때
+  - 삼일절·광복절·개천절·한글날·부처님오신날·기독탄신일: **토·일요일**과 겹칠 때
+  - 1월 1일, 현충일: 대체공휴일 없음
+  - 대체일 = "그 다음 첫 번째 비공휴일"(주말도 아니고 이미 공휴일도 아닌 날)
+  - 제도 시행 연도 반영: 설날·추석·어린이날 2014년~, 삼일절·광복절·개천절·한글날 2021년~, 부처님오신날·기독탄신일 2023년~
+- **한계**: 정부가 그때그때 지정하는 **임시공휴일**은 계산으로 알 수 없음 → API 또는 수동 추가 필요
+- 단위테스트 `KoreanHolidayCalculatorTests` 31케이스로 2013·2023~2026년 실제 공휴일과 대조 검증
+
+**(b) 공공데이터포털 API — 더 정확한 데이터로 덮어쓰기**
+
 공공데이터포털(data.go.kr) **"한국천문연구원_특일 정보"** API 사용:
 - Base: `http://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService`
 - 주요 오퍼레이션:
@@ -81,6 +100,10 @@ Core.Desktop  Core.Calendar  Core.Holiday   Core.Google    Core.Storage
   - `get24DivisionsInfo`, `getSundryDayInfo`: 24절기/잡절 (선택적, 요구사항에는 없음 — 스킵 가능)
 - 인증: data.go.kr에서 개인이 서비스 신청 후 발급받는 인증키(Encoding/Decoding key) 필요 → **사용자가 직접 발급받아 설정 화면에 입력**하는 구조로 설계 (앱에 키를 하드코딩하지 않음)
 - 연 단위로 호출(`solYear=2026`) → 결과를 로컬 SQLite `Holiday` 테이블에 캐싱, 앱 시작 시 "캐시에 다음 연도 데이터가 없으면" 자동 호출
+- **출처 우선순위: 수동(Manual) > API > 내장(Builtin)**. `HolidayRepository`가 연도별로 관리:
+  - `HolidayBuiltinYear` 테이블 = 내장 공휴일을 그 연도에 이미 넣었는지 (한 번만 넣어야 사용자의 "공휴일 해제"가 유지됨)
+  - `ApplyBuiltinYear`는 `INSERT OR IGNORE` — 그 날짜에 이미 항목이 있으면 건드리지 않음
+  - `ReplaceYearFromApi`는 그 연도의 Api/Builtin 항목을 모두 지우고 API 데이터로 교체
 - **임시공휴일**: 정부가 임시공휴일을 지정하면 공공데이터포털 API 데이터도 갱신되지만 반영 시점에 지연이 있을 수 있음 → 설정에서 "공휴일 수동 추가/제외" 기능으로 사용자가 직접 보정 가능하게 함 (`Holiday.Source = Manual`)
 - 주말(토/일)은 API 호출 없이 `DayOfWeek`로 로컬 계산
 
@@ -207,7 +230,8 @@ Settings (key-value)
 
 | 용도 | 패키지/서비스 | 사용자 준비물 |
 |---|---|---|
-| 공휴일 | 공공데이터포털 "한국천문연구원 특일정보" | data.go.kr 가입 + API 키 발급 (사용자가 설정에 입력) |
+| 공휴일 | 앱 내장 계산(`KoreanHolidayCalculator`) — 기본 | 없음 |
+| 공휴일(선택) | 공공데이터포털 "한국천문연구원 특일정보" | data.go.kr 가입 + API 키 발급 (사용자가 설정에 입력). **임시공휴일까지 정확히 받으려면 필요** |
 | 구글 캘린더 | `Google.Apis.Calendar.v3`, `Google.Apis.Auth` NuGet | Google Cloud Console OAuth Client ID/Secret 발급 |
 | DB | `Microsoft.Data.Sqlite` NuGet | 없음 |
 | 트레이 아이콘 | `Hardcodet.NotifyIcon.Wpf` (또는 동급) | 없음 |
@@ -245,12 +269,12 @@ Settings (key-value)
 - [x] DDay CRUD(`DDayRepository`) + 계산 로직(`DDayCalculator`, 매년 반복 시 "다가오는 가장 가까운 발생일"로 환산, 2/29 생일은 평년에 2/28로 보정) + 단위테스트 7개 전부 통과
 - [x] 위젯 상단에 D-day 리스트 영역 렌더링(`DDayPanel`, 남은 일수 적은 순 최대 5개 칩), 클릭하면 `DDayListWindow`(추가/수정/삭제) 오픈. 우클릭 메뉴 "D-day 관리..."로도 접근 가능
 
-### Phase 5 — 구글 캘린더 연동
-- [ ] OAuth 클라이언트 ID/Secret 설정 UI
-- [ ] OAuth 로그인 플로우 + Refresh Token DPAPI 암호화 저장
-- [ ] 캘린더 목록 조회 + 연동할 캘린더 선택 UI
-- [ ] 이벤트 폴링 동기화 (주기 설정 가능) + 로컬 캐시 저장
-- [ ] `ShowGoogleEvents` 토글 및 위젯 렌더링에 병합 반영
+### Phase 5 — 구글 캘린더 연동 ✅ 완료 (2026-08-17)
+- [x] OAuth 클라이언트 ID/Secret 설정 UI (`GoogleSettingsWindow`, 위젯 우클릭 메뉴 "구글 캘린더 연동...")
+- [x] OAuth 로그인 플로우 + Refresh Token DPAPI 암호화 저장 (`GoogleCalendarClient.AuthorizeAsync` + `SqliteDpapiDataStore`)
+- [x] 캘린더 목록 조회 + 연동할 캘린더 선택 UI (체크박스 목록, 기본 캘린더 자동 선택)
+- [x] 이벤트 폴링 동기화 (주기 설정 가능, 기본 30분) + 로컬 캐시 저장 (`GoogleSyncService`, `GoogleEventCache`)
+- [x] `ShowGoogleEvents` 토글 및 위젯 렌더링에 병합 반영 (구글 일정은 초록 칩으로 구분)
 
 ### Phase 6 — 마무리
 - [ ] 트레이 아이콘 + 컨텍스트 메뉴(설정/종료)
@@ -304,3 +328,15 @@ Settings (key-value)
   - **실행 검증**: UI Automation으로 (1) 우클릭→D-day 관리→추가→제목/날짜/매년반복 입력→저장 후 위젯 상단에 "D-10 생일" 칩 렌더링 확인, (2) 7/6 날짜 클릭→추가→종일 체크→종료 날짜를 7/9로 설정→저장 후 7/6·7/7·7/8·7/9 네 칸 모두에 "여름 휴가" 칩이 표시되는 것을 스크린샷으로 확인.
   - `dotnet build` 전체 경고/오류 0개. Phase 0~4 전체 완료. 다음 세션은 Phase 5(구글 캘린더 연동)부터 시작.
 - **2026-07-31**: 첫 git 커밋 생성 + GitHub 원격 저장소(`https://github.com/lucki3377/my_desktop_calendar.git`)에 push 완료(`origin/master`). 이전까지 로컬에만 있던 변경사항을 하나의 커밋("Add desktop background calendar app (Phase 0-4)")으로 묶음. 앞으로도 의미 있는 단위로 커밋 권장.
+- **2026-08-17**: Phase 5(구글 캘린더 연동) 완료 + 공휴일 앱 내장 계산 추가.
+  - **환경 복구**: 이 PC에서 .NET 8 SDK가 사라져 있었고(`C:\Program Files\dotnet\sdk` 없음, 런타임 8.0.16만 남음) `%AppData%\DesktopCalendar\calendar.db`도 없었음 — PC가 초기화된 것으로 보임. winget으로 .NET 8 SDK(8.0.424) 재설치 후 진행. DB는 앱 실행 시 자동 재생성됨(이전 일정/설정은 소실).
+  - `Core.Google`: `TokenProtector`(DPAPI), `SqliteDpapiDataStore`(Google 라이브러리의 `IDataStore` 구현 — 기본 `FileDataStore`는 토큰을 평문 JSON으로 저장하므로 쓰지 않음), `GoogleCalendarClient`(OAuth 인증/캘린더 목록/이벤트 조회, 읽기 전용 스코프), `GoogleEvent` + `GoogleEventRepository`(캐시), `GoogleSettings`(설정 타입 래퍼), `GoogleSyncService`(폴링 동기화) 구현. DPAPI 때문에 TFM을 `net8.0-windows`로 변경.
+  - 구글 계정 이메일은 별도 패키지(Oauth2 v2) 없이 `CalendarList.Get("primary").Id`로 얻는다.
+  - 종일 일정의 구글 `end.date`는 배타적이라 하루 빼서 로컬 `Schedule`과 같은 "포함" 기준으로 맞춤.
+  - `App`: `GoogleSettingsWindow` 신규(클라이언트 ID/Secret, 연결/해제, 캘린더 체크박스 목록, 표시 토글, 동기화 주기, 지금 동기화). `WidgetWindow`에 `DispatcherTimer` 기반 폴링 + 표시 중인 달이 캐시 구간 밖이면 재동기화하는 로직 추가. 날짜 셀 렌더링을 `DayItem` 표시용 모델로 바꿔 로컬(파랑)·구글(초록) 일정을 한 목록으로 병합. `DayEventsWindow`에 구글 일정을 "[구글] ..." 접두로 읽기 전용 표시(수정/삭제 시 안내).
+  - **공휴일 내장 계산**(사용자 요청): `KoreanHolidayCalculator` 추가 — 양력 고정 공휴일 + 음력(설날/부처님오신날/추석, `KoreanLunisolarCalendar`) + 대체공휴일 규칙(공휴일별 판정 차이와 제도 시행 연도까지 반영). `HolidaySource.Builtin` 추가, `HolidayBuiltinYear` 테이블로 연도당 1회만 삽입(사용자의 "공휴일 해제"가 유지되도록). 우선순위 = 수동 > API > 내장.
+  - **실행 검증**(UI Automation + 스크린샷): (1) API 키 없이 2026년 8월에 광복절(8/15)·대체공휴일(8/17)이 빨갛게 표시됨, DB 덤프로 2026년 19건 전부 실제 공휴일과 일치 확인. (2) 구글 설정 창 렌더링·저장/복원(주기 15분, 표시 토글 off→on 왕복)·유효성 검사("동기화 주기는 1 이상") 확인. (3) 미연결 상태에서 "지금 동기화" → 크래시 없이 "구글 OAuth 클라이언트 정보가 설정되지 않았습니다" 안내. (4) `GoogleEventCache`에 테스트 이벤트를 넣어 병합 렌더링 확인 — 같은 날 로컬(파랑 09:00)/구글(초록 14:00) 시간순 정렬, 구글 종일 일정, 3일짜리 구글 일정이 세 칸에 걸쳐 표시. (5) 날짜 팝업에서 "[구글] 14:00~15:00 구글 팀 회의"가 목록에 뜨고 "수정" 시 읽기 전용 안내. (6) 표시 토글 off 시 초록 칩만 사라지고 로컬/공휴일은 유지. 검증용 테스트 데이터는 모두 삭제함.
+  - `dotnet build` 경고/오류 0개, `dotnet test` 38개 전부 통과(공휴일 계산기 31개 신규).
+  - **미검증 항목**: 실제 구글 OAuth 왕복(브라우저 동의 → 토큰 저장 → 이벤트 조회)은 **테스트 못함** — 사용자의 Google Cloud Console OAuth 클라이언트와 구글 계정 로그인이 필요함. 사용자가 클라이언트 ID/보안 비밀을 발급받아 "구글 캘린더 연동..."에서 연결해본 뒤 문제가 있으면 `GoogleCalendarClient`/`GoogleSyncService`를 점검할 것. data.go.kr 공휴일 API 키 왕복도 여전히 미검증(키 없음).
+  - 참고: 위젯이 WorkerW에 붙어 있어 UI Automation으로 마우스 클릭을 보낼 때는 먼저 `SetForegroundWindow`로 위젯을 포그라운드로 만들어야 클릭이 전달됨(안 그러면 바탕화면 아이콘 레이어가 클릭을 먹음).
+  - 다음 세션은 Phase 6(트레이 아이콘, 자동 실행, 설정 창 정리, 배포 빌드)부터 시작.

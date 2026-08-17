@@ -33,17 +33,56 @@ public sealed class HolidayRepository
             CREATE TABLE IF NOT EXISTS HolidayCachedYear (
                 Year INTEGER PRIMARY KEY NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS HolidayBuiltinYear (
+                Year INTEGER PRIMARY KEY NOT NULL
+            );
             """;
         command.ExecuteNonQuery();
     }
 
-    public bool IsYearCached(int year)
+    /// <summary>그 연도의 공휴일을 API에서 받아와 캐시해 두었는지.</summary>
+    public bool IsYearCached(int year) => IsYearMarked("HolidayCachedYear", year);
+
+    /// <summary>그 연도에 앱 내장 계산 공휴일을 이미 넣었는지 (한 번만 넣어야 사용자의 '공휴일 해제'가 유지된다).</summary>
+    public bool IsBuiltinYearApplied(int year) => IsYearMarked("HolidayBuiltinYear", year);
+
+    private bool IsYearMarked(string tableName, int year)
     {
         using var connection = Open();
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT 1 FROM HolidayCachedYear WHERE Year = $year;";
+        command.CommandText = $"SELECT 1 FROM {tableName} WHERE Year = $year;";
         command.Parameters.AddWithValue("$year", year);
         return command.ExecuteScalar() is not null;
+    }
+
+    /// <summary>
+    /// 앱이 직접 계산한 공휴일을 넣는다. 이미 그 날짜에 항목이 있으면(API/수동) 건드리지 않는다 —
+    /// 정확도가 높은 쪽이 항상 이긴다 (DESIGN.md 4.2).
+    /// </summary>
+    public void ApplyBuiltinYear(int year, IReadOnlyList<Holiday> holidays)
+    {
+        using var connection = Open();
+        using var transaction = connection.BeginTransaction();
+
+        foreach (var holiday in holidays)
+        {
+            using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText =
+                "INSERT OR IGNORE INTO Holiday (Date, Name, Kind, Source) VALUES ($date, $name, $kind, $source);";
+            BindParameters(insert, holiday);
+            insert.ExecuteNonQuery();
+        }
+
+        using (var markApplied = connection.CreateCommand())
+        {
+            markApplied.Transaction = transaction;
+            markApplied.CommandText = "INSERT OR IGNORE INTO HolidayBuiltinYear (Year) VALUES ($year);";
+            markApplied.Parameters.AddWithValue("$year", year);
+            markApplied.ExecuteNonQuery();
+        }
+
+        transaction.Commit();
     }
 
     /// <summary>API에서 받아온 연도별 공휴일로 캐시를 갱신한다 (해당 연도의 기존 Api 출처 데이터는 덮어씀).</summary>
@@ -52,12 +91,22 @@ public sealed class HolidayRepository
         using var connection = Open();
         using var transaction = connection.BeginTransaction();
 
+        // API 데이터가 내장 계산본보다 정확하므로, 그 연도의 기존 Api/Builtin 항목은 모두 지우고 새로 넣는다.
         using (var delete = connection.CreateCommand())
         {
             delete.Transaction = transaction;
-            delete.CommandText = "DELETE FROM Holiday WHERE Source = 'Api' AND Date LIKE $yearPrefix;";
+            delete.CommandText =
+                "DELETE FROM Holiday WHERE Source IN ('Api', 'Builtin') AND Date LIKE $yearPrefix;";
             delete.Parameters.AddWithValue("$yearPrefix", $"{year:D4}-%");
             delete.ExecuteNonQuery();
+        }
+
+        using (var clearBuiltinMark = connection.CreateCommand())
+        {
+            clearBuiltinMark.Transaction = transaction;
+            clearBuiltinMark.CommandText = "DELETE FROM HolidayBuiltinYear WHERE Year = $year;";
+            clearBuiltinMark.Parameters.AddWithValue("$year", year);
+            clearBuiltinMark.ExecuteNonQuery();
         }
 
         foreach (var holiday in holidays)

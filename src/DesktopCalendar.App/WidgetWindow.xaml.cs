@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using DesktopCalendar.Core.Calendar;
 using DesktopCalendar.Core.Desktop;
+using DesktopCalendar.Core.Google;
 using DesktopCalendar.Core.Holiday;
 using DesktopCalendar.Core.Storage;
 
@@ -32,9 +33,13 @@ public partial class WidgetWindow : Window
     private readonly ScheduleRepository _scheduleRepository = new();
     private readonly HolidayRepository _holidayRepository = new();
     private readonly DDayRepository _dDayRepository = new();
+    private readonly GoogleEventRepository _googleEventRepository = new();
+    private readonly SqliteDpapiDataStore _googleDataStore = new();
+    private readonly GoogleSettings _googleSettings;
     private readonly HashSet<int> _fetchingHolidayYears = [];
     private readonly DesktopBackgroundHost _backgroundHost = new();
     private readonly DispatcherTimer _reattachTimer;
+    private readonly DispatcherTimer _googleSyncTimer;
 
     private IntPtr _hwnd;
     private bool _isLocked;
@@ -43,11 +48,17 @@ public partial class WidgetWindow : Window
     private DateTime _displayedMonth;
     private double _fontScale;
 
+    /// <summary>현재 구글 이벤트 캐시가 담고 있는 구간. 표시할 달이 이 밖이면 다시 동기화한다.</summary>
+    private DateTime _googleCachedRangeStart;
+    private DateTime _googleCachedRangeEnd;
+    private bool _isSyncingGoogle;
+
     public WidgetWindow()
     {
         InitializeComponent();
 
         _settings = new SettingsStore();
+        _googleSettings = new GoogleSettings(_settings);
         LoadWindowState();
         _fontScale = _settings.GetDouble("Widget.FontScale", 1.0);
 
@@ -63,6 +74,13 @@ public partial class WidgetWindow : Window
             Interval = TimeSpan.FromSeconds(5)
         };
         _reattachTimer.Tick += (_, _) => _backgroundHost.EnsureAttached(_hwnd);
+
+        // 구글 일정 폴링 동기화 (DESIGN.md 4.4 — 주기는 설정에서 조절)
+        _googleSyncTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMinutes(GoogleSettings.DefaultSyncIntervalMinutes)
+        };
+        _googleSyncTimer.Tick += (_, _) => SyncGoogleEventsAsync(_displayedMonth);
     }
 
     private void LoadWindowState()
@@ -97,11 +115,13 @@ public partial class WidgetWindow : Window
     {
         _backgroundHost.Attach(_hwnd);
         _reattachTimer.Start();
+        ApplyGoogleSyncSchedule();
     }
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         _reattachTimer.Stop();
+        _googleSyncTimer.Stop();
         SaveWindowState();
     }
 
@@ -255,23 +275,36 @@ public partial class WidgetWindow : Window
     {
         MonthYearText.Text = _displayedMonth.ToString("yyyy년 M월", Korean) + "  ▾";
 
-        var schedules = _scheduleRepository.GetByMonth(_displayedMonth.Year, _displayedMonth.Month);
-        var schedulesByDate = new Dictionary<DateOnly, List<Schedule>>();
-        foreach (var schedule in schedules)
+        var itemsByDate = new Dictionary<DateOnly, List<DayItem>>();
+
+        foreach (var schedule in _scheduleRepository.GetByMonth(_displayedMonth.Year, _displayedMonth.Month))
         {
-            var start = DateOnly.FromDateTime(schedule.StartAt);
-            var end = DateOnly.FromDateTime(schedule.EndAt);
-            for (var cursor = start; cursor <= end; cursor = cursor.AddDays(1))
+            AddSpanningItem(itemsByDate,
+                new DayItem(schedule.Title, schedule.StartAt, schedule.IsAllDay, IsGoogle: false, schedule.Color),
+                schedule.StartAt, schedule.EndAt);
+        }
+
+        // 구글 일정 병합 (DESIGN.md 4.5 — 토글이 꺼져 있으면 캐시가 있어도 표시하지 않음)
+        if (_googleSettings.ShowEvents)
+        {
+            foreach (var googleEvent in _googleEventRepository.GetByMonth(_displayedMonth.Year, _displayedMonth.Month))
             {
-                if (!schedulesByDate.TryGetValue(cursor, out var list))
-                    schedulesByDate[cursor] = list = [];
-                list.Add(schedule);
+                AddSpanningItem(itemsByDate,
+                    new DayItem(googleEvent.Title, googleEvent.StartAt, googleEvent.IsAllDay, IsGoogle: true, null),
+                    googleEvent.StartAt, googleEvent.EndAt);
             }
         }
+
+        foreach (var list in itemsByDate.Values)
+            list.Sort((a, b) => a.StartAt.CompareTo(b.StartAt));
+
+        // 내장 계산 공휴일을 먼저 채워 넣어야(동기) 이번 렌더링에 바로 반영된다.
+        EnsureBuiltinHolidaysForYear(_displayedMonth.Year);
 
         var holidaysByDate = _holidayRepository.GetByMonth(_displayedMonth.Year, _displayedMonth.Month)
             .ToDictionary(h => h.Date);
         EnsureHolidaysForYearAsync(_displayedMonth.Year);
+        EnsureGoogleEventsForMonth(_displayedMonth);
 
         DaysGrid.Children.Clear();
 
@@ -282,10 +315,100 @@ public partial class WidgetWindow : Window
         {
             var date = gridStart.AddDays(i);
             var dateOnly = DateOnly.FromDateTime(date);
-            schedulesByDate.TryGetValue(dateOnly, out var daySchedules);
+            itemsByDate.TryGetValue(dateOnly, out var dayItems);
             holidaysByDate.TryGetValue(dateOnly, out var holiday);
-            DaysGrid.Children.Add(BuildDayCell(date, daySchedules, holiday));
+            DaysGrid.Children.Add(BuildDayCell(date, dayItems, holiday));
         }
+    }
+
+    /// <summary>여러 날에 걸친 일정을 겹치는 모든 날짜 칸에 넣는다 (DESIGN.md 4.3).</summary>
+    private static void AddSpanningItem(
+        Dictionary<DateOnly, List<DayItem>> itemsByDate, DayItem item, DateTime startAt, DateTime endAt)
+    {
+        var start = DateOnly.FromDateTime(startAt);
+        var end = DateOnly.FromDateTime(endAt);
+        for (var cursor = start; cursor <= end; cursor = cursor.AddDays(1))
+        {
+            if (!itemsByDate.TryGetValue(cursor, out var list))
+                itemsByDate[cursor] = list = [];
+            list.Add(item);
+        }
+    }
+
+    /// <summary>표시할 달이 구글 캐시 구간 밖이면 그 달을 기준으로 다시 동기화한다.</summary>
+    private void EnsureGoogleEventsForMonth(DateTime month)
+    {
+        if (!_googleSettings.IsConnected)
+            return;
+
+        var monthStart = new DateTime(month.Year, month.Month, 1);
+        var monthEnd = monthStart.AddMonths(1);
+        if (monthStart >= _googleCachedRangeStart && monthEnd <= _googleCachedRangeEnd)
+            return;
+
+        SyncGoogleEventsAsync(month);
+    }
+
+    /// <summary>
+    /// 구글 일정을 백그라운드로 받아온다. 실패해도 위젯 동작을 막지 않도록 조용히 넘어가고,
+    /// 자세한 오류는 설정 창의 "지금 동기화"에서 확인할 수 있다.
+    /// </summary>
+    private async void SyncGoogleEventsAsync(DateTime anchorMonth)
+    {
+        if (_isSyncingGoogle || !_googleSettings.IsConnected)
+            return;
+
+        _isSyncingGoogle = true;
+        try
+        {
+            var syncService = new GoogleSyncService(_googleSettings, _googleEventRepository, _googleDataStore);
+            var result = await syncService.SyncAsync(anchorMonth);
+            if (!result.Success)
+                return;
+
+            _googleCachedRangeStart = result.RangeStart;
+            _googleCachedRangeEnd = result.RangeEnd;
+            RenderMonth();
+        }
+        finally
+        {
+            _isSyncingGoogle = false;
+        }
+    }
+
+    private void ApplyGoogleSyncSchedule()
+    {
+        _googleSyncTimer.Stop();
+        if (!_googleSettings.IsConnected)
+            return;
+
+        _googleSyncTimer.Interval = TimeSpan.FromMinutes(_googleSettings.SyncIntervalMinutes);
+        _googleSyncTimer.Start();
+    }
+
+    private void GoogleSettingsMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var window = new GoogleSettingsWindow(_googleSettings, _googleEventRepository, _googleDataStore);
+        window.ShowDialog();
+
+        // 계정/캘린더/주기가 바뀌었을 수 있으므로 캐시 구간을 무효화하고 다시 받아온다.
+        _googleCachedRangeStart = DateTime.MinValue;
+        _googleCachedRangeEnd = DateTime.MinValue;
+
+        ApplyGoogleSyncSchedule();
+        RenderMonth();
+    }
+
+    /// <summary>
+    /// API 키가 없어도 공휴일이 보이도록, 앱이 직접 계산한 공휴일을 그 연도에 한 번 채워 넣는다
+    /// (DESIGN.md 4.2 — API 데이터가 들어오면 그쪽으로 교체된다).
+    /// </summary>
+    private void EnsureBuiltinHolidaysForYear(int year)
+    {
+        if (_holidayRepository.IsYearCached(year) || _holidayRepository.IsBuiltinYearApplied(year))
+            return;
+
+        _holidayRepository.ApplyBuiltinYear(year, KoreanHolidayCalculator.GetHolidays(year));
     }
 
     private async void EnsureHolidaysForYearAsync(int year)
@@ -327,7 +450,7 @@ public partial class WidgetWindow : Window
         }
     }
 
-    private Border BuildDayCell(DateTime date, List<Schedule>? daySchedules, Holiday? holiday)
+    private Border BuildDayCell(DateTime date, List<DayItem>? dayItems, Holiday? holiday)
     {
         var isCurrentMonth = date.Month == _displayedMonth.Month;
         var isToday = date.Date == DateTime.Today;
@@ -372,13 +495,13 @@ public partial class WidgetWindow : Window
         }
 
         var eventsPanel = new StackPanel { Margin = new Thickness(2, 0, 2, 2) };
-        if (daySchedules is { Count: > 0 })
+        if (dayItems is { Count: > 0 })
         {
-            var visible = daySchedules.Take(MaxVisibleSchedulesPerCell);
-            foreach (var schedule in visible)
-                eventsPanel.Children.Add(BuildScheduleChip(schedule, _fontScale));
+            var visible = dayItems.Take(MaxVisibleSchedulesPerCell);
+            foreach (var item in visible)
+                eventsPanel.Children.Add(BuildItemChip(item, _fontScale));
 
-            var overflow = daySchedules.Count - MaxVisibleSchedulesPerCell;
+            var overflow = dayItems.Count - MaxVisibleSchedulesPerCell;
             if (overflow > 0)
             {
                 eventsPanel.Children.Add(new TextBlock
@@ -410,14 +533,19 @@ public partial class WidgetWindow : Window
         return cell;
     }
 
-    private static Border BuildScheduleChip(Schedule schedule, double fontScale)
+    private static Border BuildItemChip(DayItem item, double fontScale)
     {
-        var chipBrush = TryParseColor(schedule.Color) ?? new SolidColorBrush(Color.FromArgb(210, 70, 130, 200));
-        var text = schedule.IsAllDay ? schedule.Title : $"{schedule.StartAt:HH:mm} {schedule.Title}";
+        // 구글 일정은 로컬 일정(파랑)과 구분되도록 초록 계열로 그린다.
+        var defaultBrush = item.IsGoogle
+            ? new SolidColorBrush(Color.FromArgb(210, 55, 150, 105))
+            : new SolidColorBrush(Color.FromArgb(210, 70, 130, 200));
+        var chipBrush = TryParseColor(item.Color) ?? defaultBrush;
+        var text = item.IsAllDay ? item.Title : $"{item.StartAt:HH:mm} {item.Title}";
 
         return new Border
         {
             Background = chipBrush,
+            ToolTip = item.IsGoogle ? $"[구글] {item.Title}" : null,
             CornerRadius = new CornerRadius(3),
             Margin = new Thickness(0, 0, 0, 2),
             Padding = new Thickness(3, 1, 3, 1),
@@ -453,7 +581,11 @@ public partial class WidgetWindow : Window
         if (sender is not Border { Tag: DateOnly date })
             return;
 
-        var dialog = new DayEventsWindow(date, _scheduleRepository, _holidayRepository);
+        var googleEvents = _googleSettings.ShowEvents
+            ? _googleEventRepository.GetByDate(date)
+            : [];
+
+        var dialog = new DayEventsWindow(date, _scheduleRepository, _holidayRepository, googleEvents);
         dialog.ShowDialog();
 
         RenderMonth();
@@ -482,4 +614,7 @@ public partial class WidgetWindow : Window
             RenderMonth();
         }
     }
+
+    /// <summary>날짜 칸에 칩으로 그릴 항목. 로컬 일정과 구글 일정을 같은 모양으로 다루기 위한 표시용 모델.</summary>
+    private sealed record DayItem(string Title, DateTime StartAt, bool IsAllDay, bool IsGoogle, string? Color);
 }
