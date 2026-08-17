@@ -29,6 +29,7 @@
                     <MenuItem Header="글자 크기 조절..." Click="FontSizeMenuItem_Click" />
                     <MenuItem Header="색상 / 투명도..." Click="AppearanceMenuItem_Click" />
                     <MenuItem Header="D-day 관리..." Click="DDayManageMenuItem_Click" />
+                    <MenuItem Header="백업 / 내보내기..." Click="BackupMenuItem_Click" />
                     <Separator />
                     <MenuItem Header="도움말..." Click="HelpMenuItem_Click" />
                     <Separator />

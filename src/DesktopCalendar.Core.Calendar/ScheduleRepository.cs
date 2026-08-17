@@ -155,6 +155,30 @@ public sealed class ScheduleRepository
         command.ExecuteNonQuery();
     }
 
+    /// <summary>백업용 — 저장된 모든 일정을 그대로(반복은 펼치지 않고) 돌려준다.</summary>
+    public IReadOnlyList<Schedule> GetAll()
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT {SelectColumns} FROM Schedule ORDER BY StartAt;";
+
+        var results = new List<Schedule>();
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+            results.Add(ReadSchedule(reader));
+
+        return results;
+    }
+
+    /// <summary>백업 복원용 — 같은 Id가 있으면 덮어쓴다.</summary>
+    public void Upsert(Schedule schedule)
+    {
+        if (GetById(schedule.Id) is null)
+            Add(schedule);
+        else
+            Update(schedule);
+    }
+
     public Schedule? GetById(Guid id)
     {
         using var connection = Open();

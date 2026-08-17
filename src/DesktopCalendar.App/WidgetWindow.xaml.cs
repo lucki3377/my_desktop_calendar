@@ -222,6 +222,19 @@ public partial class WidgetWindow : Window
     private void HelpMenuItem_Click(object sender, RoutedEventArgs e) =>
         new HelpWindow().ShowDialog();
 
+    private void BackupMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var backupService = new BackupService(_scheduleRepository, _dDayRepository, _holidayRepository);
+        var window = new BackupWindow(backupService);
+        window.ShowDialog();
+
+        if (window.DataChanged)
+        {
+            BuildDDayPanel();
+            RenderMonth();
+        }
+    }
+
     private void BuildDDayPanel()
     {
         DDayPanel.Children.Clear();

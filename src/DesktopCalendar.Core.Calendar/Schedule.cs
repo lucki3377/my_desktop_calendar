@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace DesktopCalendar.Core.Calendar;
 
 /// <summary>일정 반복 주기 (DESIGN.md 4.11).</summary>
@@ -27,6 +29,7 @@ public sealed class Schedule
     public int? ReminderMinutesBefore { get; set; }
 
     /// <summary>알림을 띄워야 하는 시각. 알림이 꺼져 있으면 null.</summary>
+    [JsonIgnore]
     public DateTime? ReminderAt =>
         ReminderMinutesBefore is null ? null : StartAt.AddMinutes(-ReminderMinutesBefore.Value);
 
@@ -39,6 +42,7 @@ public sealed class Schedule
     /// <summary>반복 중 건너뛸 날짜들 (개별 회차를 삭제하면 여기에 쌓인다).</summary>
     public IReadOnlyList<DateOnly> RecurrenceExceptions { get; set; } = [];
 
+    [JsonIgnore]
     public bool IsRecurring => Recurrence != RecurrenceType.None;
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public DateTime UpdatedAt { get; set; } = DateTime.Now;

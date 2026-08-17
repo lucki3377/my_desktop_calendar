@@ -138,6 +138,9 @@ public sealed class HolidayRepository
     public IReadOnlyList<Holiday> GetByMonth(int year, int month) =>
         Query("Date LIKE $pattern", ("$pattern", $"{year:D4}-{month:D2}-%"));
 
+    /// <summary>백업 대상 — 사용자가 직접 추가한 공휴일만 (API/내장 계산본은 다시 만들 수 있으므로 제외).</summary>
+    public IReadOnlyList<Holiday> GetManual() => Query("Source = 'Manual'");
+
     public Holiday? GetByDate(DateOnly date) =>
         Query("Date = $date", ("$date", date.ToString("yyyy-MM-dd"))).FirstOrDefault();
 

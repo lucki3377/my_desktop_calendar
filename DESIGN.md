@@ -173,6 +173,16 @@ Core.Desktop  Core.Calendar  Core.Holiday   Core.Google    Core.Storage
 - 알림도 회차 단위로 판단하므로 반복 일정의 매 회차마다 제때 알림이 간다 (`ReminderPlanner.SelectDue`가 `ScheduleOccurrence`를 받음)
 - 조회 시 반복 일정은 시작이 한참 전이어도 지금 구간에 열릴 수 있으므로, SQL에서는 "끝나지 않은 반복"을 넓게 읽고 실제 판단은 `RecurrenceExpander`에 맡긴다
 
+### 4.12 백업 / 내보내기 (2026-08-17 추가)
+
+데이터가 `%AppData%\DesktopCalendar\calendar.db` 한 곳에만 있어서, PC를 초기화하면 그대로 사라진다(2026-08-17 실제로 겪음). 위젯 우클릭 "백업 / 내보내기..."에서:
+
+- **백업 파일로 저장(.json)**: 일정 + D-day + 수동 공휴일을 담는다. API/내장 계산 공휴일과 구글 캐시는 다시 만들 수 있으므로 담지 않는다
+- **백업에서 복원(.json)**: 현재 데이터에 **합친다**(같은 Id는 덮어쓰고, 백업에 없는 항목은 지우지 않음) — 실수로 복원해도 기존 데이터가 날아가지 않게 한 선택
+- **iCalendar로 내보내기(.ics)**: 구글 캘린더·아웃룩에서 가져올 수 있는 표준 형식(`IcsExporter`). 반복 일정은 회차를 늘어놓지 않고 `RRULE`+`EXDATE`로 내보낸다. 종일 일정의 `DTEND`는 규격대로 배타적(마지막 날 +1일)
+- `.ics` **가져오기는 지원하지 않는다** — 제대로 하려면 iCalendar 파서가 필요해서 최초 버전 범위 밖
+- 백업 파일에는 `Version` 필드가 있고, 앱보다 새로운 버전이면 복원을 거부한다
+
 ### 4.8 설정 저장
 
 - `Settings` 테이블(or 단순 JSON 파일 `settings.json`) — SQLite에 key-value로 저장 권장(단일 저장소로 통일)
@@ -398,3 +408,10 @@ Settings (key-value)
   - `DayEventsWindow`: 목록에 "(매주)" 같은 반복 표시, 삭제 시 "이 날짜만 / 반복 전체 / 취소"를 묻는다. 수정은 항상 시리즈 전체.
   - **실행 검증**: 9/3(목)에 매주 반복 일정 저장 → 9/3·10·17·24 네 칸에 렌더링 확인(스크린샷). 9/17에서 "이 날짜만 삭제" → 9/17만 사라지고 나머지 회차는 유지되는 것 확인. 이어서 "반복 전체 삭제"로 정리.
   - `dotnet test` 63개 통과(반복 로직 11개 신규).
+- **2026-08-17**: 백업 / 내보내기 추가 (추천 기능 4번). 설계는 4.12 참조.
+  - `IcsExporter`(Core.Calendar, 순수 로직): VCALENDAR/VEVENT 생성, 반복은 RRULE·EXDATE, 종일 일정 DTEND 배타적 처리, 텍스트 이스케이프, 75옥텟 줄 접기. 테스트 14개.
+  - `BackupService`(App): JSON 내보내기/복원, .ics 내보내기. 복원은 Upsert 방식이라 기존 데이터를 지우지 않는다. 저장소에 `ScheduleRepository.GetAll/Upsert`, `DDayRepository.Upsert`, `HolidayRepository.GetManual` 추가. `Schedule`의 계산 속성에는 `[JsonIgnore]`.
+  - `BackupWindow` + 위젯 우클릭 메뉴 "백업 / 내보내기...". 복원으로 데이터가 바뀌면 위젯을 다시 그린다.
+  - **실행 검증**: 일정 1건을 넣고 백업 저장 → JSON 내용 확인 → DB에서 일정 삭제 → 백업에서 복원 → 일정이 되살아나는 것 확인. .ics 내보내기 결과가 유효한 VCALENDAR인 것도 확인. 테스트 데이터·파일은 정리함.
+  - 참고: WPF의 파일 대화상자는 UI Automation 트리에서 최상위 창이 아니라 **부모 창의 하위**로 붙는다. 자동화할 때는 부모 창 안에서 찾거나 SendKeys로 경로를 입력해야 한다.
+  - `dotnet test` 77개 통과(.ics 14개 신규).

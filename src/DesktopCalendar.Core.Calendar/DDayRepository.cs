@@ -54,6 +54,23 @@ public sealed class DDayRepository
         return results;
     }
 
+    /// <summary>백업 복원용 — 같은 Id가 있으면 덮어쓴다.</summary>
+    public void Upsert(DDay dday)
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            INSERT INTO DDay (Id, Title, TargetDate, IsRecurringYearly)
+            VALUES ($id, $title, $targetDate, $isRecurringYearly)
+            ON CONFLICT(Id) DO UPDATE SET
+                Title = excluded.Title, TargetDate = excluded.TargetDate,
+                IsRecurringYearly = excluded.IsRecurringYearly;
+            """;
+        BindParameters(command, dday);
+        command.ExecuteNonQuery();
+    }
+
     public DDay Add(DDay dday)
     {
         using var connection = Open();
