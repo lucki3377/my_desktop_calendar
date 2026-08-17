@@ -22,21 +22,11 @@
                 MouseLeftButtonUp="PanelBorder_MouseLeftButtonUp"
                 MouseMove="PanelBorder_MouseMove">
             <Border.ContextMenu>
+                <!-- 세부 설정은 설정 창 한 곳으로 모았다 (DESIGN.md Phase 6) -->
                 <ContextMenu>
+                    <MenuItem Header="설정..." Click="SettingsMenuItem_Click" />
                     <MenuItem Name="LockMenuItem" Header="위치 잠금" IsCheckable="True" Click="LockMenuItem_Click" />
-                    <MenuItem Header="공휴일 API 키 설정..." Click="ApiKeySettingsMenuItem_Click" />
-                    <MenuItem Header="구글 캘린더 연동..." Click="GoogleSettingsMenuItem_Click" />
-                    <MenuItem Header="글자 크기 조절..." Click="FontSizeMenuItem_Click" />
-                    <MenuItem Header="색상 / 투명도..." Click="AppearanceMenuItem_Click" />
-                    <!-- 체크 상태가 바뀌는 것 자체에 반응해야 하므로 Click이 아니라 Checked/Unchecked를 쓴다 -->
-                    <MenuItem Name="MondayStartMenuItem" Header="월요일 시작" IsCheckable="True"
-                              Checked="MondayStartMenuItem_CheckedChanged"
-                              Unchecked="MondayStartMenuItem_CheckedChanged" />
-                    <MenuItem Name="LunarMenuItem" Header="음력 표시" IsCheckable="True"
-                              Checked="LunarMenuItem_CheckedChanged"
-                              Unchecked="LunarMenuItem_CheckedChanged" />
                     <MenuItem Header="D-day 관리..." Click="DDayManageMenuItem_Click" />
-                    <MenuItem Header="백업 / 내보내기..." Click="BackupMenuItem_Click" />
                     <Separator />
                     <MenuItem Header="도움말..." Click="HelpMenuItem_Click" />
                     <Separator />

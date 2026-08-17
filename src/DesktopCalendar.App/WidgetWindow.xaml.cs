@@ -49,7 +49,9 @@ public partial class WidgetWindow : Window
     private bool _isDragging;
     private DateTime _displayedMonth;
     private double _fontScale;
-    private WidgetTheme _theme;
+
+    /// <summary>생성자에서 <see cref="ReloadDisplaySettings"/>가 반드시 채운다.</summary>
+    private WidgetTheme _theme = null!;
     private bool _weekStartsOnMonday;
     private bool _showLunarDates;
 
@@ -65,13 +67,8 @@ public partial class WidgetWindow : Window
         _settings = new SettingsStore();
         _googleSettings = new GoogleSettings(_settings);
         LoadWindowState();
-        _fontScale = _settings.GetDouble("Widget.FontScale", 1.0);
-
         _displayedMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-        _theme = WidgetTheme.Load(_settings);
-        _weekStartsOnMonday = _settings.GetBool("Widget.WeekStartsOnMonday", false);
-        _showLunarDates = _settings.GetBool("Widget.ShowLunarDates", false);
-        ApplyTheme();
+        ReloadDisplaySettings();
 
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
@@ -117,29 +114,6 @@ public partial class WidgetWindow : Window
         DesktopBackgroundHost.HideFromTaskbarAndAltTab(_hwnd);
 
         LockMenuItem.IsChecked = _isLocked;
-        MondayStartMenuItem.IsChecked = _weekStartsOnMonday;
-        LunarMenuItem.IsChecked = _showLunarDates;
-    }
-
-    private void MondayStartMenuItem_CheckedChanged(object sender, RoutedEventArgs e)
-    {
-        if (MondayStartMenuItem.IsChecked == _weekStartsOnMonday)
-            return; // 시작할 때 저장된 값을 되돌려 놓는 경우
-
-        _weekStartsOnMonday = MondayStartMenuItem.IsChecked;
-        _settings.SetBool("Widget.WeekStartsOnMonday", _weekStartsOnMonday);
-        BuildWeekdayHeader();
-        RenderMonth();
-    }
-
-    private void LunarMenuItem_CheckedChanged(object sender, RoutedEventArgs e)
-    {
-        if (LunarMenuItem.IsChecked == _showLunarDates)
-            return;
-
-        _showLunarDates = LunarMenuItem.IsChecked;
-        _settings.SetBool("Widget.ShowLunarDates", _showLunarDates);
-        RenderMonth();
     }
 
     /// <summary>주 시작 요일에 맞춘 칸 순서에서 <paramref name="dayOfWeek"/>가 몇 번째인지.</summary>
@@ -219,6 +193,20 @@ public partial class WidgetWindow : Window
         Application.Current.Shutdown();
     }
 
+    /// <summary>
+    /// 표시 관련 설정을 저장소에서 다시 읽어 화면에 반영한다.
+    /// 설정 창에서 값을 바꾼 뒤에도 이 한 번의 호출로 전부 맞춰진다.
+    /// </summary>
+    public void ReloadDisplaySettings()
+    {
+        _fontScale = _settings.GetDouble("Widget.FontScale", 1.0);
+        _theme = WidgetTheme.Load(_settings);
+        _weekStartsOnMonday = _settings.GetBool("Widget.WeekStartsOnMonday", false);
+        _showLunarDates = _settings.GetBool("Widget.ShowLunarDates", false);
+
+        ApplyTheme();
+    }
+
     /// <summary>글자 크기와 색상 테마를 화면 전체에 다시 적용한다.</summary>
     private void ApplyTheme()
     {
@@ -238,34 +226,35 @@ public partial class WidgetWindow : Window
         RenderMonth();
     }
 
-    /// <summary>트레이 메뉴에서도 같은 창을 열 수 있게 공개해 둔다.</summary>
-    public void OpenAppearanceDialog() => AppearanceMenuItem_Click(this, new RoutedEventArgs());
-
-    private void AppearanceMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        var dialog = new AppearanceDialog(_theme);
-        if (dialog.ShowDialog() == true)
-        {
-            _theme = dialog.SelectedTheme;
-            _theme.Save(_settings);
-            ApplyTheme();
-        }
-    }
-
     private void HelpMenuItem_Click(object sender, RoutedEventArgs e) =>
         new HelpWindow().ShowDialog();
 
-    private void BackupMenuItem_Click(object sender, RoutedEventArgs e)
+    private void SettingsMenuItem_Click(object sender, RoutedEventArgs e) => OpenSettings();
+
+    /// <summary>설정 창을 연다. 트레이 메뉴에서도 부를 수 있도록 공개해 둔다.</summary>
+    public void OpenSettings()
     {
-        var backupService = new BackupService(_scheduleRepository, _dDayRepository, _holidayRepository);
-        var window = new BackupWindow(backupService);
+        var window = new SettingsWindow(
+            _settings, _googleSettings, _scheduleRepository, _dDayRepository,
+            _holidayRepository, _googleEventRepository, _googleDataStore);
+
+        // 설정은 즉시 반영된다 — 창을 닫기 전에도 위젯이 따라 바뀐다.
+        window.SettingsChanged += (_, _) => ApplySettingsFromStore();
         window.ShowDialog();
 
-        if (window.DataChanged)
-        {
-            BuildDDayPanel();
-            RenderMonth();
-        }
+        ApplySettingsFromStore();
+    }
+
+    /// <summary>저장소의 설정을 다시 읽어 화면·동기화 일정에 모두 반영한다.</summary>
+    private void ApplySettingsFromStore()
+    {
+        // 계정이나 캘린더가 바뀌었을 수 있으므로 구글 캐시 구간을 무효화하고 다시 받아온다.
+        _googleCachedRangeStart = DateTime.MinValue;
+        _googleCachedRangeEnd = DateTime.MinValue;
+
+        ApplyGoogleSyncSchedule();
+        EnsureHolidaysForYearAsync(_displayedMonth.Year);
+        ReloadDisplaySettings();
     }
 
     private void BuildDDayPanel()
@@ -315,17 +304,6 @@ public partial class WidgetWindow : Window
         var window = new DDayListWindow(_dDayRepository);
         window.ShowDialog();
         BuildDDayPanel();
-    }
-
-    private void FontSizeMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        var dialog = new FontSizeDialog(_fontScale);
-        if (dialog.ShowDialog() == true)
-        {
-            _fontScale = dialog.SelectedScale;
-            _settings.SetDouble("Widget.FontScale", _fontScale);
-            ApplyTheme();
-        }
     }
 
     private void BuildWeekdayHeader()
@@ -464,19 +442,6 @@ public partial class WidgetWindow : Window
         _googleSyncTimer.Start();
     }
 
-    private void GoogleSettingsMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        var window = new GoogleSettingsWindow(_googleSettings, _googleEventRepository, _googleDataStore);
-        window.ShowDialog();
-
-        // 계정/캘린더/주기가 바뀌었을 수 있으므로 캐시 구간을 무효화하고 다시 받아온다.
-        _googleCachedRangeStart = DateTime.MinValue;
-        _googleCachedRangeEnd = DateTime.MinValue;
-
-        ApplyGoogleSyncSchedule();
-        RenderMonth();
-    }
-
     /// <summary>
     /// API 키가 없어도 공휴일이 보이도록, 앱이 직접 계산한 공휴일을 그 연도에 한 번 채워 넣는다
     /// (DESIGN.md 4.2 — API 데이터가 들어오면 그쪽으로 교체된다).
@@ -515,16 +480,6 @@ public partial class WidgetWindow : Window
         finally
         {
             _fetchingHolidayYears.Remove(year);
-        }
-    }
-
-    private void ApiKeySettingsMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        var dialog = new ApiKeyDialog(_settings.GetString("Holiday.ApiKey"));
-        if (dialog.ShowDialog() == true && dialog.ApiKey is not null)
-        {
-            _settings.SetString("Holiday.ApiKey", dialog.ApiKey);
-            EnsureHolidaysForYearAsync(_displayedMonth.Year);
         }
     }
 

@@ -50,7 +50,7 @@ public partial class App : Application
             : Visibility.Visible;
     }
 
-    private void TrayAppearance_Click(object sender, RoutedEventArgs e) => _widget?.OpenAppearanceDialog();
+    private void TraySettings_Click(object sender, RoutedEventArgs e) => _widget?.OpenSettings();
 
     private void TrayHelp_Click(object sender, RoutedEventArgs e) => new HelpWindow().ShowDialog();
 

@@ -17,7 +17,7 @@
                 <ContextMenu>
                     <MenuItem Header="달력 보이기 / 숨기기" Click="TrayToggleWidget_Click" />
                     <Separator />
-                    <MenuItem Header="색상 / 투명도..." Click="TrayAppearance_Click" />
+                    <MenuItem Header="설정..." Click="TraySettings_Click" />
                     <MenuItem Header="도움말..." Click="TrayHelp_Click" />
                     <Separator />
                     <MenuItem Header="종료" Click="TrayExit_Click" />
