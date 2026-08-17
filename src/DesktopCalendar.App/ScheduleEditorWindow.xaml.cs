@@ -1,12 +1,19 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using DesktopCalendar.Core.Calendar;
 
 namespace DesktopCalendar.App;
 
 public partial class ScheduleEditorWindow : Window
 {
+    private const double SwatchSize = 26;
+
     private readonly Guid? _originalId;
+
+    /// <summary>선택한 색(#RRGGBB). null이면 기본색으로 저장한다.</summary>
+    private string? _selectedColor;
 
     public Schedule? Result { get; private set; }
 
@@ -25,6 +32,7 @@ public partial class ScheduleEditorWindow : Window
             EndDatePicker.SelectedDate = existing.EndAt.Date;
             StartTimeBox.Text = existing.StartAt.ToString("HH:mm");
             EndTimeBox.Text = existing.EndAt.ToString("HH:mm");
+            _selectedColor = existing.Color;
         }
         else
         {
@@ -35,7 +43,53 @@ public partial class ScheduleEditorWindow : Window
             EndTimeBox.Text = "10:00";
         }
 
+        BuildColorSwatches();
         UpdateTimeFieldsEnabled();
+    }
+
+    private void BuildColorSwatches()
+    {
+        foreach (var (name, hex) in ScheduleColors.Palette)
+        {
+            var swatch = new Border
+            {
+                Width = SwatchSize,
+                Height = SwatchSize,
+                CornerRadius = new CornerRadius(4),
+                Margin = new Thickness(0, 0, 6, 0),
+                Background = ScheduleColors.ToBrush(hex),
+                Cursor = Cursors.Hand,
+                ToolTip = name,
+                Tag = hex,
+            };
+            swatch.MouseLeftButtonDown += ColorSwatch_MouseLeftButtonDown;
+            ColorPanel.Children.Add(swatch);
+        }
+
+        UpdateSwatchSelection();
+    }
+
+    private void ColorSwatch_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not Border swatch)
+            return;
+
+        _selectedColor = swatch.Tag as string;
+        UpdateSwatchSelection();
+    }
+
+    /// <summary>선택된 스와치에만 테두리를 둘러 표시한다.</summary>
+    private void UpdateSwatchSelection()
+    {
+        foreach (var child in ColorPanel.Children)
+        {
+            if (child is not Border swatch)
+                continue;
+
+            var isSelected = string.Equals(swatch.Tag as string, _selectedColor, StringComparison.OrdinalIgnoreCase);
+            swatch.BorderBrush = isSelected ? Brushes.Black : Brushes.LightGray;
+            swatch.BorderThickness = new Thickness(isSelected ? 2 : 1);
+        }
     }
 
     private void StartDatePicker_SelectedDateChanged(object sender, SelectionChangedEventArgs e)
@@ -113,6 +167,7 @@ public partial class ScheduleEditorWindow : Window
             StartAt = startAt,
             EndAt = endAt,
             IsAllDay = isAllDay,
+            Color = _selectedColor,
         };
 
         DialogResult = true;

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Windows;
+using System.Windows.Media;
 using DesktopCalendar.Core.Calendar;
 using DesktopCalendar.Core.Google;
 using DesktopCalendar.Core.Holiday;
@@ -153,8 +154,11 @@ public partial class DayEventsWindow : Window
             "안내", MessageBoxButton.OK, MessageBoxImage.Information);
 
     /// <summary><paramref name="Schedule"/>이 null이면 구글에서 가져온 읽기 전용 항목이다.</summary>
-    private sealed record ScheduleListItem(Schedule? Schedule, string Display)
+    public sealed record ScheduleListItem(Schedule? Schedule, string Display)
     {
+        /// <summary>목록 앞에 붙는 색 표시. 달력 칸의 칩과 같은 색이 나오도록 같은 규칙을 쓴다.</summary>
+        public Brush ChipBrush => ScheduleColors.ToBrush(Schedule?.Color, isGoogle: Schedule is null);
+
         public override string ToString() => Display;
     }
 }

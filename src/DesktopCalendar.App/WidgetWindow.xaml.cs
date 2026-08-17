@@ -558,11 +558,8 @@ public partial class WidgetWindow : Window
 
     private static Border BuildItemChip(DayItem item, double fontScale)
     {
-        // 구글 일정은 로컬 일정(파랑)과 구분되도록 초록 계열로 그린다.
-        var defaultBrush = item.IsGoogle
-            ? new SolidColorBrush(Color.FromArgb(210, 55, 150, 105))
-            : new SolidColorBrush(Color.FromArgb(210, 70, 130, 200));
-        var chipBrush = TryParseColor(item.Color) ?? defaultBrush;
+        // 색을 고르지 않은 일정은 기본 파랑, 구글 일정은 초록 계열로 구분해서 그린다.
+        var chipBrush = ScheduleColors.ToBrush(item.Color, item.IsGoogle);
         var text = item.IsAllDay ? item.Title : $"{item.StartAt:HH:mm} {item.Title}";
 
         return new Border
@@ -580,21 +577,6 @@ public partial class WidgetWindow : Window
                 TextTrimming = TextTrimming.CharacterEllipsis,
             },
         };
-    }
-
-    private static SolidColorBrush? TryParseColor(string? colorHex)
-    {
-        if (string.IsNullOrWhiteSpace(colorHex))
-            return null;
-
-        try
-        {
-            return (SolidColorBrush)new BrushConverter().ConvertFromString(colorHex)!;
-        }
-        catch (FormatException)
-        {
-            return null;
-        }
     }
 
     private void DayCell_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

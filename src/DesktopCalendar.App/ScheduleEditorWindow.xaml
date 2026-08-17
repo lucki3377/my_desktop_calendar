@@ -4,11 +4,13 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         mc:Ignorable="d"
-        Title="일정 편집" Width="340" Height="460"
+        Title="일정 편집" Width="340" Height="530"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize">
     <Grid Margin="14">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -61,11 +63,14 @@
         <TextBlock Grid.Row="5" Text="여러 날에 걸친 일정은 종료 날짜를 다르게 지정하세요."
                     Foreground="Gray" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap" />
 
-        <TextBlock Grid.Row="6" Text="메모" Margin="0,0,0,4" />
-        <TextBox Grid.Row="7" Name="DescriptionBox" AcceptsReturn="True" TextWrapping="Wrap"
+        <TextBlock Grid.Row="6" Text="색상" Margin="0,0,0,4" />
+        <WrapPanel Grid.Row="7" Name="ColorPanel" Margin="0,0,0,10" />
+
+        <TextBlock Grid.Row="8" Text="메모" Margin="0,0,0,4" />
+        <TextBox Grid.Row="9" Name="DescriptionBox" AcceptsReturn="True" TextWrapping="Wrap"
                  VerticalScrollBarVisibility="Auto" />
 
-        <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+        <StackPanel Grid.Row="10" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <Button Name="SaveButton" Content="저장" Width="70" Margin="0,0,6,0" Click="SaveButton_Click" IsDefault="True" />
             <Button Name="CancelButton" Content="취소" Width="70" Click="CancelButton_Click" IsCancel="True" />
         </StackPanel>
