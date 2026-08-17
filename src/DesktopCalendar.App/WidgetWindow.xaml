@@ -28,6 +28,13 @@
                     <MenuItem Header="구글 캘린더 연동..." Click="GoogleSettingsMenuItem_Click" />
                     <MenuItem Header="글자 크기 조절..." Click="FontSizeMenuItem_Click" />
                     <MenuItem Header="색상 / 투명도..." Click="AppearanceMenuItem_Click" />
+                    <!-- 체크 상태가 바뀌는 것 자체에 반응해야 하므로 Click이 아니라 Checked/Unchecked를 쓴다 -->
+                    <MenuItem Name="MondayStartMenuItem" Header="월요일 시작" IsCheckable="True"
+                              Checked="MondayStartMenuItem_CheckedChanged"
+                              Unchecked="MondayStartMenuItem_CheckedChanged" />
+                    <MenuItem Name="LunarMenuItem" Header="음력 표시" IsCheckable="True"
+                              Checked="LunarMenuItem_CheckedChanged"
+                              Unchecked="LunarMenuItem_CheckedChanged" />
                     <MenuItem Header="D-day 관리..." Click="DDayManageMenuItem_Click" />
                     <MenuItem Header="백업 / 내보내기..." Click="BackupMenuItem_Click" />
                     <Separator />
@@ -56,9 +63,15 @@
                                Foreground="White" FontSize="14" FontWeight="Bold"
                                Cursor="Hand"
                                MouseLeftButtonDown="MonthYearText_MouseLeftButtonDown" />
-                    <Button Grid.Column="2" Name="NextMonthButton" Content="▶" Click="NextMonth_Click"
-                            Background="Transparent" BorderThickness="0" Foreground="White"
-                            FontSize="13" Padding="6,0" Cursor="Hand" />
+                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <!-- 몇 달 넘겨본 뒤 이번 달로 한 번에 돌아오는 버튼 -->
+                        <Button Name="TodayButton" Content="오늘" Click="TodayButton_Click"
+                                Background="Transparent" BorderThickness="0" Foreground="White"
+                                FontSize="11" Padding="6,0" Cursor="Hand" />
+                        <Button Name="NextMonthButton" Content="▶" Click="NextMonth_Click"
+                                Background="Transparent" BorderThickness="0" Foreground="White"
+                                FontSize="13" Padding="6,0" Cursor="Hand" />
+                    </StackPanel>
                 </Grid>
 
                 <!-- 요일 헤더 -->

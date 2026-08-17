@@ -25,6 +25,8 @@ public partial class WidgetWindow : Window
     private const int MaxVisibleSchedulesPerCell = 3;
 
     private static readonly CultureInfo Korean = new("ko-KR");
+
+    /// <summary>일요일 시작 기준 요일 이름. 월요일 시작이면 앞의 하나를 뒤로 돌려 쓴다.</summary>
     private static readonly string[] WeekdayLabels = ["일", "월", "화", "수", "목", "금", "토"];
 
     private const int MaxVisibleDDays = 5;
@@ -48,6 +50,8 @@ public partial class WidgetWindow : Window
     private DateTime _displayedMonth;
     private double _fontScale;
     private WidgetTheme _theme;
+    private bool _weekStartsOnMonday;
+    private bool _showLunarDates;
 
     /// <summary>현재 구글 이벤트 캐시가 담고 있는 구간. 표시할 달이 이 밖이면 다시 동기화한다.</summary>
     private DateTime _googleCachedRangeStart;
@@ -65,6 +69,8 @@ public partial class WidgetWindow : Window
 
         _displayedMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
         _theme = WidgetTheme.Load(_settings);
+        _weekStartsOnMonday = _settings.GetBool("Widget.WeekStartsOnMonday", false);
+        _showLunarDates = _settings.GetBool("Widget.ShowLunarDates", false);
         ApplyTheme();
 
         SourceInitialized += OnSourceInitialized;
@@ -111,7 +117,34 @@ public partial class WidgetWindow : Window
         DesktopBackgroundHost.HideFromTaskbarAndAltTab(_hwnd);
 
         LockMenuItem.IsChecked = _isLocked;
+        MondayStartMenuItem.IsChecked = _weekStartsOnMonday;
+        LunarMenuItem.IsChecked = _showLunarDates;
     }
+
+    private void MondayStartMenuItem_CheckedChanged(object sender, RoutedEventArgs e)
+    {
+        if (MondayStartMenuItem.IsChecked == _weekStartsOnMonday)
+            return; // 시작할 때 저장된 값을 되돌려 놓는 경우
+
+        _weekStartsOnMonday = MondayStartMenuItem.IsChecked;
+        _settings.SetBool("Widget.WeekStartsOnMonday", _weekStartsOnMonday);
+        BuildWeekdayHeader();
+        RenderMonth();
+    }
+
+    private void LunarMenuItem_CheckedChanged(object sender, RoutedEventArgs e)
+    {
+        if (LunarMenuItem.IsChecked == _showLunarDates)
+            return;
+
+        _showLunarDates = LunarMenuItem.IsChecked;
+        _settings.SetBool("Widget.ShowLunarDates", _showLunarDates);
+        RenderMonth();
+    }
+
+    /// <summary>주 시작 요일에 맞춘 칸 순서에서 <paramref name="dayOfWeek"/>가 몇 번째인지.</summary>
+    private int ColumnOf(DayOfWeek dayOfWeek) =>
+        _weekStartsOnMonday ? ((int)dayOfWeek + 6) % 7 : (int)dayOfWeek;
 
     private void OnLoaded(object? sender, RoutedEventArgs e)
     {
@@ -298,14 +331,21 @@ public partial class WidgetWindow : Window
     private void BuildWeekdayHeader()
     {
         WeekdayHeader.Children.Clear();
-        for (int i = 0; i < WeekdayLabels.Length; i++)
+        for (int column = 0; column < WeekdayLabels.Length; column++)
         {
+            var dayOfWeek = (DayOfWeek)(_weekStartsOnMonday ? (column + 1) % 7 : column);
+
             WeekdayHeader.Children.Add(new TextBlock
             {
-                Text = WeekdayLabels[i],
+                Text = WeekdayLabels[(int)dayOfWeek],
                 HorizontalAlignment = HorizontalAlignment.Center,
                 FontSize = 11 * _fontScale,
-                Foreground = i == 0 ? _theme.SundayText : i == 6 ? _theme.SaturdayText : _theme.PrimaryText,
+                Foreground = dayOfWeek switch
+                {
+                    DayOfWeek.Sunday => _theme.SundayText,
+                    DayOfWeek.Saturday => _theme.SaturdayText,
+                    _ => _theme.PrimaryText,
+                },
             });
         }
     }
@@ -347,8 +387,7 @@ public partial class WidgetWindow : Window
 
         DaysGrid.Children.Clear();
 
-        var startOffset = (int)_displayedMonth.DayOfWeek;
-        var gridStart = _displayedMonth.AddDays(-startOffset);
+        var gridStart = _displayedMonth.AddDays(-ColumnOf(_displayedMonth.DayOfWeek));
 
         for (int i = 0; i < 42; i++)
         {
@@ -509,15 +548,34 @@ public partial class WidgetWindow : Window
 
         var content = new DockPanel { LastChildFill = true };
 
-        content.Children.Add(new TextBlock
+        // 날짜 숫자는 왼쪽, (켜져 있으면) 음력은 오른쪽에 작게.
+        var headerRow = new DockPanel { Margin = new Thickness(3, 2, 3, 2) };
+        headerRow.Children.Add(new TextBlock
         {
             Text = date.Day.ToString(),
             Foreground = numberForeground,
             FontSize = 11 * _fontScale,
             FontWeight = isToday ? FontWeights.Bold : FontWeights.Normal,
-            Margin = new Thickness(3, 2, 0, 2),
         });
-        DockPanel.SetDock(content.Children[^1], Dock.Top);
+        DockPanel.SetDock(headerRow.Children[^1], Dock.Left);
+
+        if (_showLunarDates && KoreanLunarDate.Format(DateOnly.FromDateTime(date)) is { } lunarLabel)
+        {
+            // 날짜 숫자 바로 옆에 붙인다 — 칸 오른쪽 끝에 두면 옆 칸 숫자에 붙어 보인다.
+            headerRow.Children.Add(new TextBlock
+            {
+                Text = lunarLabel,
+                Foreground = _theme.MutedText,
+                FontSize = 8 * _fontScale,
+                Margin = new Thickness(3, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Bottom,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+            });
+            DockPanel.SetDock(headerRow.Children[^1], Dock.Left);
+        }
+
+        DockPanel.SetDock(headerRow, Dock.Top);
+        content.Children.Add(headerRow);
 
         if (holiday is not null)
         {
@@ -621,6 +679,12 @@ public partial class WidgetWindow : Window
     private void NextMonth_Click(object sender, RoutedEventArgs e)
     {
         _displayedMonth = _displayedMonth.AddMonths(1);
+        RenderMonth();
+    }
+
+    private void TodayButton_Click(object sender, RoutedEventArgs e)
+    {
+        _displayedMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
         RenderMonth();
     }
 
