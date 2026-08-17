@@ -1,0 +1,185 @@
+<Window x:Class="DesktopCalendar.App.HelpWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        mc:Ignorable="d"
+        Title="도움말" Width="640" Height="720"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanResizeWithGrip">
+    <Window.Resources>
+        <!-- 단계 제목 -->
+        <Style x:Key="StepHeader" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Margin" Value="0,14,0,4" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <!-- 본문 -->
+        <Style x:Key="Body" TargetType="TextBlock">
+            <Setter Property="Margin" Value="14,0,0,3" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <!-- 주의 사항 -->
+        <Style x:Key="Note" TargetType="Border">
+            <Setter Property="Background" Value="#FFF4E5" />
+            <Setter Property="BorderBrush" Value="#E0B770" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="10,8,10,8" />
+            <Setter Property="Margin" Value="0,10,0,0" />
+        </Style>
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Margin" Value="0,0,0,2" />
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TabControl Grid.Row="0" Name="TopicTabs">
+
+            <!-- ============ 구글 캘린더 ============ -->
+            <TabItem Name="GoogleTab" Header="구글 캘린더 연동">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="14">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="구글 캘린더 연동하기" />
+                        <TextBlock TextWrapping="Wrap" Foreground="#555555"
+                                   Text="구글 일정을 달력에 함께 보려면, 본인 구글 계정으로 OAuth 클라이언트를 한 번 만들어야 합니다. 무료이고 10분이면 끝납니다. 일정은 읽기만 하며, 이 앱의 일정을 구글로 올리지는 않습니다." />
+
+                        <TextBlock Style="{StaticResource StepHeader}" Text="1단계. Google Cloud Console에서 프로젝트 만들기" />
+                        <TextBlock Style="{StaticResource Body}">
+                            <Hyperlink NavigateUri="https://console.cloud.google.com/" RequestNavigate="Hyperlink_RequestNavigate">console.cloud.google.com</Hyperlink>
+                            <Run Text=" 에 접속해 구글 계정으로 로그인합니다." />
+                        </TextBlock>
+                        <TextBlock Style="{StaticResource Body}" Text="상단 프로젝트 선택 메뉴 → [새 프로젝트] → 이름을 적당히(예: DesktopCalendar) 정하고 만듭니다." />
+
+                        <TextBlock Style="{StaticResource StepHeader}" Text="2단계. Google Calendar API 켜기" />
+                        <TextBlock Style="{StaticResource Body}" Text="왼쪽 메뉴에서 [API 및 서비스] → [라이브러리] 로 갑니다." />
+                        <TextBlock Style="{StaticResource Body}" Text="'Google Calendar API'를 검색해 선택한 뒤 [사용] 버튼을 누릅니다." />
+
+                        <TextBlock Style="{StaticResource StepHeader}" Text="3단계. OAuth 동의 화면 설정" />
+                        <TextBlock Style="{StaticResource Body}" Text="[API 및 서비스] → [OAuth 동의 화면] (최근 콘솔에서는 [Google 인증 플랫폼] → [브랜딩])" />
+                        <TextBlock Style="{StaticResource Body}" Text="User Type은 [외부]를 선택합니다. 개인 구글 계정이라면 이 항목만 선택할 수 있습니다." />
+                        <TextBlock Style="{StaticResource Body}" Text="앱 이름, 사용자 지원 이메일, 개발자 연락처 이메일만 채우면 됩니다. 범위(Scopes)는 건너뛰어도 앱이 알아서 요청합니다." />
+                        <TextBlock Style="{StaticResource Body}" Text="[대상] 또는 [테스트 사용자] 항목에서 본인 구글 계정 이메일을 반드시 추가하세요." />
+
+                        <Border Style="{StaticResource Note}">
+                            <TextBlock TextWrapping="Wrap"
+                                       Text="⚠ 테스트 사용자로 등록하지 않으면 4단계 이후 로그인할 때 '액세스 차단됨' 오류가 납니다. 게시하지 않은 앱은 등록된 테스트 사용자만 쓸 수 있기 때문입니다." />
+                        </Border>
+
+                        <TextBlock Style="{StaticResource StepHeader}" Text="4단계. OAuth 클라이언트 ID 만들기" />
+                        <TextBlock Style="{StaticResource Body}" Text="[API 및 서비스] → [사용자 인증 정보] → [+ 사용자 인증 정보 만들기] → [OAuth 클라이언트 ID]" />
+                        <TextBlock Style="{StaticResource Body}" Text="애플리케이션 유형은 반드시 [데스크톱 앱]을 고릅니다. (웹 애플리케이션을 고르면 로그인이 실패합니다.)" />
+                        <TextBlock Style="{StaticResource Body}" Text="만들고 나면 '클라이언트 ID'와 '클라이언트 보안 비밀'이 표시됩니다. 두 값을 복사해 둡니다." />
+
+                        <TextBlock Style="{StaticResource StepHeader}" Text="5단계. 앱에 입력하고 연결하기" />
+                        <TextBlock Style="{StaticResource Body}" Text="위젯에서 마우스 우클릭 → [구글 캘린더 연동...] 을 엽니다." />
+                        <TextBlock Style="{StaticResource Body}" Text="복사한 클라이언트 ID / 보안 비밀을 붙여넣고 [구글 계정 연결]을 누릅니다." />
+                        <TextBlock Style="{StaticResource Body}" Text="브라우저가 열리면 구글 계정을 고르고 권한에 동의합니다." />
+                        <TextBlock Style="{StaticResource Body}" Text="'Google에서 확인하지 않은 앱입니다' 경고가 나오면 [고급] → [(앱 이름)(으)로 이동]을 누르면 됩니다. 본인이 만든 앱이라 정상입니다." />
+                        <TextBlock Style="{StaticResource Body}" Text="연결되면 캘린더 목록이 뜹니다. 달력에 표시할 캘린더를 체크하고 [저장]을 누르세요." />
+
+                        <Border Style="{StaticResource Note}">
+                            <StackPanel>
+                                <TextBlock TextWrapping="Wrap" FontWeight="Bold" Text="알아두면 좋은 것" />
+                                <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                                           Text="• 동의 화면이 '테스트' 상태이면 로그인 정보가 7일 뒤 만료될 수 있습니다. 일정이 갱신되지 않으면 [구글 계정 연결]을 다시 누르면 됩니다. 매번 하기 번거로우면 동의 화면을 '프로덕션'으로 게시하세요." />
+                                <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                                           Text="• 클라이언트 보안 비밀과 로그인 정보는 이 PC에 Windows 암호화(DPAPI)로 저장되며, 다른 곳으로 전송되지 않습니다." />
+                                <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                                           Text="• 동기화는 기본 30분마다 이뤄지고, 표시 중인 달 앞뒤 1개월치를 가져옵니다. [지금 동기화]로 즉시 갱신할 수 있습니다." />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ============ 공휴일 API ============ -->
+            <TabItem Name="HolidayTab" Header="공휴일 API 키">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="14">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="공휴일 API 키 등록하기" />
+                        <TextBlock TextWrapping="Wrap" Foreground="#555555"
+                                   Text="공휴일은 키가 없어도 앱이 직접 계산해서 표시합니다. 다만 정부가 갑자기 지정하는 임시공휴일은 계산으로 알 수 없어서, 그것까지 자동으로 받으려면 공공데이터포털 키가 필요합니다." />
+
+                        <TextBlock Style="{StaticResource StepHeader}" Text="1단계. 공공데이터포털 가입" />
+                        <TextBlock Style="{StaticResource Body}">
+                            <Hyperlink NavigateUri="https://www.data.go.kr/" RequestNavigate="Hyperlink_RequestNavigate">www.data.go.kr</Hyperlink>
+                            <Run Text=" 에 접속해 회원가입 후 로그인합니다." />
+                        </TextBlock>
+
+                        <TextBlock Style="{StaticResource StepHeader}" Text="2단계. '특일 정보' 서비스 활용 신청" />
+                        <TextBlock Style="{StaticResource Body}" Text="검색창에 '한국천문연구원_특일 정보'를 검색합니다." />
+                        <TextBlock Style="{StaticResource Body}" Text="검색 결과에서 [오픈API] 탭의 '한국천문연구원_특일 정보'를 선택합니다." />
+                        <TextBlock Style="{StaticResource Body}" Text="[활용신청] 버튼을 누르고, 활용목적(예: 앱 개발)을 골라 신청합니다. 보통 즉시 자동 승인됩니다." />
+
+                        <TextBlock Style="{StaticResource StepHeader}" Text="3단계. 인증키 복사" />
+                        <TextBlock Style="{StaticResource Body}" Text="[마이페이지] → [데이터활용] → [Open API] → [활용신청 현황]으로 갑니다." />
+                        <TextBlock Style="{StaticResource Body}" Text="신청한 서비스의 [상세보기]를 열면 '일반 인증키'가 있습니다." />
+                        <TextBlock Style="{StaticResource Body}" Text="여기서 Encoding 키가 아니라 Decoding 키를 복사하세요." />
+
+                        <Border Style="{StaticResource Note}">
+                            <TextBlock TextWrapping="Wrap"
+                                       Text="⚠ 이 앱은 URL 인코딩을 직접 처리하므로 반드시 Decoding 키를 넣어야 합니다. Encoding 키를 넣으면 인증 오류(SERVICE_KEY_IS_NOT_REGISTERED_ERROR)가 납니다." />
+                        </Border>
+
+                        <TextBlock Style="{StaticResource StepHeader}" Text="4단계. 앱에 입력" />
+                        <TextBlock Style="{StaticResource Body}" Text="위젯에서 마우스 우클릭 → [공휴일 API 키 설정...] 을 엽니다." />
+                        <TextBlock Style="{StaticResource Body}" Text="복사한 Decoding 키를 붙여넣고 [저장]을 누르면, 표시 중인 연도의 공휴일을 바로 받아옵니다." />
+
+                        <Border Style="{StaticResource Note}">
+                            <StackPanel>
+                                <TextBlock TextWrapping="Wrap" FontWeight="Bold" Text="알아두면 좋은 것" />
+                                <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                                           Text="• 신청 직후에는 키가 활성화되기까지 몇 분에서 1시간 정도 걸릴 수 있습니다. 바로 오류가 나면 조금 뒤에 다시 시도하세요." />
+                                <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                                           Text="• 공휴일 데이터는 연도별로 한 번만 받아와 저장해 둡니다." />
+                                <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                                           Text="• 키 없이도 쓸 수 있습니다. 임시공휴일이 생기면 그 날짜를 클릭해 [공휴일로 추가]로 직접 넣으면 됩니다. 직접 넣은 공휴일은 API 데이터보다 우선합니다." />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ============ 위젯 사용법 ============ -->
+            <TabItem Name="WidgetTab" Header="위젯 사용법">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="14">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="위젯 사용법" />
+
+                        <TextBlock Style="{StaticResource StepHeader}" Text="옮기기 / 크기 조절" />
+                        <TextBlock Style="{StaticResource Body}" Text="빈 곳을 잡고 끌면 위치가 바뀌고, 오른쪽 아래 모서리를 끌면 크기가 바뀝니다." />
+                        <TextBlock Style="{StaticResource Body}" Text="자리를 잡았으면 우클릭 → [위치 잠금]으로 실수로 옮겨지는 것을 막을 수 있습니다." />
+
+                        <TextBlock Style="{StaticResource StepHeader}" Text="일정" />
+                        <TextBlock Style="{StaticResource Body}" Text="날짜를 클릭하면 그 날의 일정 목록이 열리고, 거기서 추가·수정·삭제할 수 있습니다." />
+                        <TextBlock Style="{StaticResource Body}" Text="시작 날짜와 종료 날짜를 다르게 주면 여러 날에 걸친 일정이 되고, 해당 날짜 칸에 모두 표시됩니다." />
+                        <TextBlock Style="{StaticResource Body}" Text="칸에는 최대 3개까지 보이고 넘치면 '+N개'로 표시됩니다. 날짜를 클릭하면 전부 볼 수 있습니다." />
+                        <TextBlock Style="{StaticResource Body}" Text="파란 칩은 이 앱에 저장한 일정, 초록 칩은 구글에서 가져온 일정입니다. 구글 일정은 읽기 전용입니다." />
+
+                        <TextBlock Style="{StaticResource StepHeader}" Text="달 이동" />
+                        <TextBlock Style="{StaticResource Body}" Text="◀ ▶ 로 한 달씩 이동하고, 가운데 '2026년 8월 ▾'을 클릭하면 년/월을 직접 고를 수 있습니다." />
+
+                        <TextBlock Style="{StaticResource StepHeader}" Text="D-day" />
+                        <TextBlock Style="{StaticResource Body}" Text="우클릭 → [D-day 관리...]에서 추가하면 위젯 위쪽에 남은 일수가 표시됩니다." />
+                        <TextBlock Style="{StaticResource Body}" Text="'매년 반복'을 켜면 생일처럼 올해 기준으로 가장 가까운 날짜를 계산합니다." />
+
+                        <TextBlock Style="{StaticResource StepHeader}" Text="글자가 작다면" />
+                        <TextBlock Style="{StaticResource Body}" Text="우클릭 → [글자 크기 조절...]에서 70%~200%로 키우거나 줄일 수 있습니다." />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Name="CloseButton" Content="닫기" Width="70" Click="CloseButton_Click" IsCancel="True" IsDefault="True" />
+        </StackPanel>
+    </Grid>
+</Window>

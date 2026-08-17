@@ -25,4 +25,7 @@ public partial class ApiKeyDialog : Window
     }
 
     private void CancelButton_Click(object sender, RoutedEventArgs e) => DialogResult = false;
+
+    private void HelpButton_Click(object sender, RoutedEventArgs e) =>
+        new HelpWindow(HelpTopic.Holiday) { Owner = this }.ShowDialog();
 }

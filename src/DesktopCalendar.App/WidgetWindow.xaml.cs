@@ -47,6 +47,7 @@ public partial class WidgetWindow : Window
     private bool _isDragging;
     private DateTime _displayedMonth;
     private double _fontScale;
+    private WidgetTheme _theme;
 
     /// <summary>현재 구글 이벤트 캐시가 담고 있는 구간. 표시할 달이 이 밖이면 다시 동기화한다.</summary>
     private DateTime _googleCachedRangeStart;
@@ -63,7 +64,8 @@ public partial class WidgetWindow : Window
         _fontScale = _settings.GetDouble("Widget.FontScale", 1.0);
 
         _displayedMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-        ApplyFontScale();
+        _theme = WidgetTheme.Load(_settings);
+        ApplyTheme();
 
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
@@ -184,17 +186,38 @@ public partial class WidgetWindow : Window
         Application.Current.Shutdown();
     }
 
-    private void ApplyFontScale()
+    /// <summary>글자 크기와 색상 테마를 화면 전체에 다시 적용한다.</summary>
+    private void ApplyTheme()
     {
+        PanelBorder.Background = _theme.PanelBrush;
+
         MonthYearText.FontSize = 14 * _fontScale;
+        MonthYearText.Foreground = _theme.PrimaryText;
         PrevMonthButton.FontSize = 13 * _fontScale;
+        PrevMonthButton.Foreground = _theme.PrimaryText;
         NextMonthButton.FontSize = 13 * _fontScale;
+        NextMonthButton.Foreground = _theme.PrimaryText;
         HintText.FontSize = 10 * _fontScale;
+        HintText.Foreground = _theme.MutedText;
 
         BuildWeekdayHeader();
         BuildDDayPanel();
         RenderMonth();
     }
+
+    private void AppearanceMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new AppearanceDialog(_theme);
+        if (dialog.ShowDialog() == true)
+        {
+            _theme = dialog.SelectedTheme;
+            _theme.Save(_settings);
+            ApplyTheme();
+        }
+    }
+
+    private void HelpMenuItem_Click(object sender, RoutedEventArgs e) =>
+        new HelpWindow().ShowDialog();
 
     private void BuildDDayPanel()
     {
@@ -252,7 +275,7 @@ public partial class WidgetWindow : Window
         {
             _fontScale = dialog.SelectedScale;
             _settings.SetDouble("Widget.FontScale", _fontScale);
-            ApplyFontScale();
+            ApplyTheme();
         }
     }
 
@@ -266,7 +289,7 @@ public partial class WidgetWindow : Window
                 Text = WeekdayLabels[i],
                 HorizontalAlignment = HorizontalAlignment.Center,
                 FontSize = 11 * _fontScale,
-                Foreground = i == 0 ? Brushes.IndianRed : i == 6 ? Brushes.CornflowerBlue : Brushes.White,
+                Foreground = i == 0 ? _theme.SundayText : i == 6 ? _theme.SaturdayText : _theme.PrimaryText,
             });
         }
     }
@@ -457,16 +480,16 @@ public partial class WidgetWindow : Window
 
         Brush numberForeground = date.DayOfWeek switch
         {
-            DayOfWeek.Sunday => Brushes.IndianRed,
-            DayOfWeek.Saturday => Brushes.CornflowerBlue,
-            _ => Brushes.White,
+            DayOfWeek.Sunday => _theme.SundayText,
+            DayOfWeek.Saturday => _theme.SaturdayText,
+            _ => _theme.PrimaryText,
         };
 
         if (holiday is not null)
-            numberForeground = Brushes.IndianRed;
+            numberForeground = _theme.HolidayText;
 
         if (!isCurrentMonth)
-            numberForeground = new SolidColorBrush(Color.FromArgb(90, 255, 255, 255));
+            numberForeground = _theme.FadedText;
 
         var content = new DockPanel { LastChildFill = true };
 
@@ -486,7 +509,7 @@ public partial class WidgetWindow : Window
             {
                 Text = holiday.Name,
                 FontSize = 9 * _fontScale,
-                Foreground = Brushes.IndianRed,
+                Foreground = _theme.HolidayText,
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 Margin = new Thickness(3, 0, 3, 2),
             };
@@ -508,7 +531,7 @@ public partial class WidgetWindow : Window
                 {
                     Text = $"+{overflow}개",
                     FontSize = 9 * _fontScale,
-                    Foreground = new SolidColorBrush(Color.FromArgb(180, 220, 220, 220)),
+                    Foreground = _theme.MutedText,
                     Margin = new Thickness(2, 1, 0, 0),
                 });
             }

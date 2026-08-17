@@ -257,6 +257,9 @@ public partial class GoogleSettingsWindow : Window
 
     private void CancelButton_Click(object sender, RoutedEventArgs e) => DialogResult = false;
 
+    private void HelpButton_Click(object sender, RoutedEventArgs e) =>
+        new HelpWindow(HelpTopic.Google) { Owner = this }.ShowDialog();
+
     /// <summary>화면의 입력값을 설정에 반영한다. 값이 잘못됐으면 안내 후 false.</summary>
     private bool TryPersistSelections()
     {

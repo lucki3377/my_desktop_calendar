@@ -27,7 +27,10 @@
                     <MenuItem Header="공휴일 API 키 설정..." Click="ApiKeySettingsMenuItem_Click" />
                     <MenuItem Header="구글 캘린더 연동..." Click="GoogleSettingsMenuItem_Click" />
                     <MenuItem Header="글자 크기 조절..." Click="FontSizeMenuItem_Click" />
+                    <MenuItem Header="색상 / 투명도..." Click="AppearanceMenuItem_Click" />
                     <MenuItem Header="D-day 관리..." Click="DDayManageMenuItem_Click" />
+                    <Separator />
+                    <MenuItem Header="도움말..." Click="HelpMenuItem_Click" />
                     <Separator />
                     <MenuItem Header="종료" Click="ExitMenuItem_Click" />
                 </ContextMenu>
