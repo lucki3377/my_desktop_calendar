@@ -27,11 +27,13 @@ cd my_desktop_calendar
 dotnet run --project src/DesktopCalendar.App
 ```
 
-런타임 없이 실행되는 단일 폴더로 만들려면:
+다른 PC로 옮길 **단일 실행 파일**을 만들려면(.NET 설치 불필요, 약 158MB):
 
 ```bash
-dotnet publish src/DesktopCalendar.App -c Release -r win-x64 --self-contained -o publish
+dotnet publish src/DesktopCalendar.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o dist
 ```
+
+만들어진 `dist/DesktopCalendar.App.exe` 하나만 복사하면 됩니다. 설치 과정은 없고, 원하는 폴더에 두고 실행하면 그 자리에서 돕니다.
 
 서명된 배포본이 아니라서 처음 실행할 때 SmartScreen이 "Windows에서 PC를 보호했습니다" 경고를 띄울 수 있습니다.
 [추가 정보] → [실행]으로 넘어가면 됩니다.

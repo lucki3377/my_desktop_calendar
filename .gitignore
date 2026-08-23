@@ -19,3 +19,7 @@ settings.local.json
 ## OS
 Thumbs.db
 desktop.ini
+
+## 배포용 단일 실행 파일 (158MB — GitHub 100MB 제한 초과)
+/DesktopCalendar.exe
+publish-single/

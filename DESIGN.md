@@ -213,6 +213,18 @@ Core.Desktop  Core.Calendar  Core.Holiday   Core.Google    Core.Storage
   - 바로가기는 `WScript.Shell` COM으로 만든다(.NET 내장 IDispatch 바인딩, 추가 패키지 없음)
   - 대상 경로는 `Environment.ProcessPath` — **지금 실행 중인 exe**를 가리킨다. 따라서 배포본으로 옮긴 뒤에는 자동 실행을 한 번 껐다 켜야 새 경로로 갱신된다
 
+### 4.16 다른 PC로 옮기기 (2026-08-23 추가)
+
+- 저장소 루트의 `DesktopCalendar.exe`가 배포용 **단일 실행 파일**이다. 이 파일 하나만 복사하면 다른 PC에서 바로 돌아간다(.NET 설치 불필요)
+  ```
+  dotnet publish src/DesktopCalendar.App -c Release -r win-x64 --self-contained true ^
+    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+  ```
+- `IncludeNativeLibrariesForSelfExtract`가 필요한 이유: SQLite의 네이티브 DLL(`e_sqlite3.dll`)이 있어서, 이 옵션이 없으면 exe 옆에 별도 파일로 떨어져 "한 파일"이 되지 않는다
+- **트레이드오프**: 단일 파일은 실행할 때 네이티브 DLL을 임시 폴더에 풀어 놓는다. 이 동작이 백신 휴리스틱에 걸릴 여지가 4.9에서 경계한 패커와 비슷하다. 트리밍은 여전히 쓰지 않는다(`PublishTrimmed=false`). 폴더 통째로 배포하는 쪽이 오탐 위험은 더 낮으므로, 문제가 생기면 486개 파일 폴더 배포로 돌아갈 것
+- 파일이 158MB라 **저장소에 커밋하지 않는다**(`.gitignore`에 `/DesktopCalendar.exe`). GitHub는 100MB 초과 파일을 거부한다
+- 이 PC의 상용 설치 위치는 `%LOCALAPPDATA%\Programs\DesktopCalendar\`이고 자동 실행 바로가기도 그곳을 가리킨다. 루트의 단일 exe는 **배포용 사본**일 뿐이라 서로 무관하다
+
 ### 4.8 설정 저장
 
 - `Settings` 테이블(or 단순 JSON 파일 `settings.json`) — SQLite에 key-value로 저장 권장(단일 저장소로 통일)
