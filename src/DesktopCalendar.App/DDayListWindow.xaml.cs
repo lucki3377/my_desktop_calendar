@@ -29,7 +29,10 @@ public partial class DDayListWindow : Window
     {
         var remaining = DDayCalculator.ComputeDaysRemaining(dday, today);
         var recurring = dday.IsRecurringYearly ? " (매년)" : "";
-        return $"{DDayCalculator.Format(remaining)}  {dday.Title}{recurring}  [{dday.TargetDate:yyyy-MM-dd}]";
+        var origin = dday.IsOffsetBased
+            ? $" [{dday.TargetDate:yyyy-MM-dd} ← {dday.BaseDate!.Value:yyyy-MM-dd} {dday.OffsetDays!.Value:+#;-#;+0}일]"
+            : $" [{dday.TargetDate:yyyy-MM-dd}]";
+        return $"{DDayCalculator.Format(remaining)}  {dday.Title}{recurring}{origin}";
     }
 
     private void AddButton_Click(object sender, RoutedEventArgs e)

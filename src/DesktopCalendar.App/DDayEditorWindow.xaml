@@ -4,7 +4,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         mc:Ignorable="d"
-        Title="D-day 편집" Width="320" Height="260"
+        Title="D-day 편집" Width="360" Height="345"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize">
     <Grid Margin="16">
@@ -18,12 +18,38 @@
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0" Text="제목" Margin="0,0,0,4" />
-        <TextBox Grid.Row="1" Name="TitleBox" Margin="0,0,0,10" />
+        <TextBox Grid.Row="1" Name="TitleBox" Margin="0,0,0,12" />
 
-        <TextBlock Grid.Row="2" Text="날짜" Margin="0,0,0,4" />
-        <DatePicker Grid.Row="3" Name="DatePickerControl" Margin="0,0,0,10" />
+        <!-- 날짜를 직접 고르는 방식 -->
+        <StackPanel Grid.Row="2" Margin="0,0,0,10">
+            <RadioButton Name="DirectModeRadio" GroupName="DateMode" Content="날짜 직접 지정"
+                         IsChecked="True" Checked="ModeRadio_Checked" />
+            <DatePicker Name="DatePickerControl" Margin="20,6,0,0"
+                        IsEnabled="{Binding IsChecked, ElementName=DirectModeRadio}"
+                        SelectedDateChanged="Input_Changed" />
+        </StackPanel>
 
-        <CheckBox Grid.Row="4" Name="RecurringCheckBox" Content="매년 반복 (생일 등)" VerticalAlignment="Top" />
+        <!-- 기준일 + N일 방식 -->
+        <StackPanel Grid.Row="3" Margin="0,0,0,10">
+            <RadioButton Name="OffsetModeRadio" GroupName="DateMode" Content="기준일로부터 며칠 후"
+                         Checked="ModeRadio_Checked" />
+            <StackPanel Margin="20,6,0,0" IsEnabled="{Binding IsChecked, ElementName=OffsetModeRadio}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="기준일" VerticalAlignment="Center" Width="44" />
+                    <DatePicker Name="BaseDatePicker" Width="150" SelectedDateChanged="Input_Changed" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                    <TextBlock Text="일수" VerticalAlignment="Center" Width="44" />
+                    <TextBox Name="OffsetDaysBox" Width="70" TextAlignment="Right"
+                             TextChanged="Input_Changed" />
+                    <TextBlock Text="일 후" VerticalAlignment="Center" Margin="6,0,0,0" />
+                </StackPanel>
+                <TextBlock Name="PreviewText" Margin="44,6,0,0" Foreground="#666666" TextWrapping="Wrap" />
+            </StackPanel>
+        </StackPanel>
+
+        <CheckBox Grid.Row="4" Name="RecurringCheckBox" Content="매년 반복 (생일 등)" VerticalAlignment="Top"
+                  Checked="Input_Changed" Unchecked="Input_Changed" />
 
         <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <Button Name="SaveButton" Content="저장" Width="70" Margin="0,0,6,0" Click="SaveButton_Click" IsDefault="True" />

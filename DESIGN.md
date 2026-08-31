@@ -136,6 +136,11 @@ Core.Desktop  Core.Calendar  Core.Holiday   Core.Google    Core.Storage
 - 계산: `(TargetDate.Date - Today.Date).Days` → "D-7", "D-DAY", "D+3" 형태로 표시
 - 반복(매년) 항목은 표시 시점에 "올해 기준 가장 가까운 발생일"로 환산해서 계산
 - 위젯에 D-day 리스트를 최대 N개(설정 가능) 상단에 노출
+- **날짜 입력 방식 2가지** (2026-08-31 추가, 사용자 요청):
+  1. **날짜 직접 지정** — 기존 방식. `DatePicker`로 대상 날짜를 고른다.
+  2. **기준일로부터 며칠 후** — 기준일 + 일수로 대상 날짜를 계산한다(예: 2026-09-01 기준 +100일 → 2026-12-10). 100일·1000일 기념일처럼 "어떤 날로부터 며칠"이 자연스러운 항목용. 음수를 넣으면 기준일 이전 날짜가 된다.
+- 2번으로 만든 항목도 **계산에 쓰이는 값은 확정된 `TargetDate` 하나**다. 기준일/일수(`BaseDate`, `OffsetDays`)는 나중에 다시 열어 수정할 수 있도록 함께 저장할 뿐이고, 표시·정렬·매년 반복 로직은 1번 항목과 완전히 동일하게 동작한다
+- 편집 창은 기준일 + 일수를 입력하는 즉시 계산 결과를 미리보기로 보여준다(예: 2026-08-31에 열면 `→ 2026-12-10(목)  D-101`)
 
 ### 4.7 UI 레이아웃 (위젯)
 
@@ -223,6 +228,10 @@ Core.Desktop  Core.Calendar  Core.Holiday   Core.Google    Core.Storage
 단순 self-contained exe로 배포하되, Windows Defender SmartScreen이나 백신 프로그램이 "알 수 없는 게시자" 실행 파일을 위험하다고 오탐하는 것을 최대한 방지:
 
 - **코드 서명**: 가능하면 코드 서명 인증서(개인/조직 EV 또는 OV)로 exe에 서명. 서명이 없으면 SmartScreen이 "Windows에서 PC를 보호했습니다" 경고를 띄울 가능성이 높음 (평판이 쌓이기 전까지는 서명해도 초기엔 경고가 나올 수 있음)
+- **배포 형태 — 단일 파일 exe** (2026-08-31 변경, 사용자 요청): `PublishSingleFile` + `EnableCompressionInSingleFile` + `IncludeNativeLibrariesForSelfExtract`로 **파일 하나(`DesktopCalendar.exe`, 약 70MB)** 만 만든다. 폴더 통째로(486개 파일 164MB) 옮기던 방식을 대체 — "그 파일만 다른 PC로 옮겨도 실행"이 목표
+  - 압축을 켰지만 시작은 느리지 않다(실측: 첫 실행 1.1초, 이후 0.9초). 네이티브 라이브러리는 `%Temp%\.net\DesktopCalendar`에 9.5MB 정도 풀린다
+  - **`PublishTrimmed`는 여전히 쓰지 않는다** — 단일 파일 묶기(번들링)는 코드를 건드리지 않지만, 트리밍은 리플렉션으로 찾는 형식을 지워 WPF에서 깨질 수 있고 백신 휴리스틱에도 더 걸린다. 압축은 번들 자체를 zip으로 묶는 것이라 별개
+  - exe 이름은 프로젝트 이름을 따라 `DesktopCalendar.App.exe`로 나오므로 publish 후 `DesktopCalendar.exe`로 바꿔서 내보낸다. `-p:AssemblyName=`으로 바꾸려 했더니 참조 프로젝트에까지 전파돼 `Ambiguous project name` 오류가 났다(명령줄 `-p:`는 참조 프로젝트로 전파됨)
 - **트리밍/난독화 지양**: `PublishTrimmed`, 코드 난독화, UPX 등 실행파일 패커는 백신 휴리스틱 탐지에 걸릴 확률을 높이므로 사용하지 않음. 일반적인 `dotnet publish -c Release --self-contained` 결과물을 그대로 배포
 - **불필요한 권한 최소화**: 관리자 권한 요구 없이 일반 사용자 권한으로 실행되게 유지 (매니페스트에 `asInvoker`), Win32 후킹은 WorkerW `SetParent`/`FindWindow`/`EnumWindows` 등 표준 API만 사용 (프로세스 인젝션, 후킹 API 등 악성코드가 흔히 쓰는 패턴 회피)
 - **자동시작 등록 방식**: 레지스트리 `Run` 키에 직접 쓰기보다, 가능하면 `Microsoft.Win32.TaskScheduler`나 시작프로그램 폴더 바로가기처럼 사용자가 눈으로 확인 가능한 방식을 우선 검토 (은닉성 낮은 방식일수록 오탐 확률 감소)
@@ -272,6 +281,8 @@ DDay
 - Title: string
 - TargetDate: date
 - IsRecurringYearly: bool
+- BaseDate: date (nullable, "기준일 + N일" 방식으로 만든 항목만)
+- OffsetDays: int (nullable, 위와 항상 함께 채워진다)
 
 Settings (key-value)
 - Key: string (PK)
@@ -471,3 +482,29 @@ Settings (key-value)
   - **배포 빌드**: `dotnet publish -c Release -r win-x64 --self-contained` → `publish/` 486개 파일 163.8MB(트리밍 미적용, 4.9 방침). `.gitignore`에 `publish/` 추가 — **하마터면 164MB를 커밋할 뻔했다.**
   - **실행 검증**: 우클릭 메뉴 5개 항목 확인, 설정 창 렌더링 확인(각 행에 실제 상태가 표시됨). 자동 실행을 켜서 `%AppData%\...\Startup\바탕화면 달력.lnk`가 올바른 TargetPath로 생성되는 것 확인 후 다시 꺼서 삭제되는 것까지 확인. 설정 창을 **열어 둔 채로** 글자 크기 130% + 월요일 시작을 바꾸자 위젯이 즉시 따라 바뀌는 것 확인 후 원래 값으로 복원. 배포본 exe를 실행해 공휴일·구글 일정·음력이 모두 정상 표시되는 것 확인. Windows Defender 로컬 검사 통과(위협 없음).
   - **남은 배포 과제**: 코드 서명 인증서가 없어 SmartScreen 경고는 여전히 뜰 수 있다(4.9). VirusTotal 점검은 업로드 시 파일이 백신 업체들에 공유되므로 사용자 판단에 맡김.
+- **2026-08-31**: D-day에 "기준일로부터 며칠 후" 입력 방식 추가 (사용자 요청). 설계는 4.6 참조.
+  - `DDay`에 `BaseDate`/`OffsetDays`(둘 다 nullable) 추가. **계산에 쓰는 값은 여전히 `TargetDate` 하나**로 두어 위젯·목록·매년 반복·백업 로직은 손대지 않았다. 기준일/일수는 나중에 다시 열어 고칠 수 있게 남겨두는 용도.
+  - `DDayCalculator.ComputeTargetFromBase` / `TryComputeTargetFromBase`(범위 초과 시 false) 추가.
+  - `DDayRepository`: 두 열을 `CREATE TABLE`에 넣고, 기존 DB용으로 `AddColumnIfMissing`(pragma_table_info 확인 후 ALTER) 마이그레이션 추가 — `ScheduleRepository`와 같은 방식. 기준일 방식이 아니면 두 열을 항상 NULL로 저장해 한쪽만 채워지는 상태를 만들지 않는다.
+  - `DDayEditorWindow`: 라디오 2개("날짜 직접 지정" / "기준일로부터 며칠 후")로 모드를 나누고, 기준일 + 일수를 입력하면 결과 날짜를 즉시 미리보기(`→ 2026-12-10(목)  D-101`, 2026-08-31 기준)로 보여준다. 음수를 넣으면 기준일 이전. 기존 항목을 열면 기준일 방식으로 만든 것은 그 모드로 복원된다.
+  - `DDayListWindow`: 기준일 방식 항목은 `[2026-12-10 ← 2026-09-01 +100일]`처럼 유래를 함께 보여준다.
+  - 테스트 7개 추가(양/음/0 오프셋, 윤일 넘기기, 날짜 범위 초과, 기준일 방식 항목의 D-day 계산).
+  - 저장소 마이그레이션 테스트 1개 추가(`DDayRepositoryTests`) — 예전 4열짜리 DDay 테이블을 만든 뒤 열어 (1) 기존 항목 보존, (2) 기준일 항목 왕복 저장, (3) 직접 지정으로 되돌리면 두 열이 NULL로 비워짐, (4) 두 번 열어도 ALTER가 중복 실행되지 않음을 확인. 기존 테스트가 순수 로직 전용이라 SQLite를 쓰는 첫 테스트지만, 사용자 PC의 실제 DB가 이 경로를 타므로 남겨 둘 값어치가 있다고 판단.
+  - **빌드/테스트**: `dotnet build` 경고·오류 0개, `dotnet test` **113개 전부 통과**(D-day 계산 7개 + 저장소 1개 신규). 참고: 이 PC의 .NET 8 SDK가 한 번 사라졌다가 2026-08-31 재설치됨(8.0.424).
+  - **실행 검증**: 위젯을 띄워 바탕화면을 뒤집는 대신, 편집 창만 오프스크린으로 렌더링해 PNG로 뽑는 임시 하네스를 스크래치패드에 만들어 확인했다(사용자 화면과 실제 DB를 건드리지 않는 방법). 새 항목 / 기준일 방식 기존 항목 / 직접 지정 기존 항목 3가지 상태의 레이아웃, 모드에 따른 비활성 처리, 미리보기(`→ 2026-12-10(목)  D-101`)가 모두 정상. 확인 후 하네스는 삭제.
+  - 검증 중 다듬은 것: 직접 지정 모드에서 회색으로 뜨던 "일수를 입력하세요" 안내를 지웠고(해당 칸이 비활성이라 혼란만 줌), 창 높이를 390 → 345로 줄여 아래 빈 공간을 없앴다.
+- **2026-08-31**: 사용자가 직접 빌드·배포할 수 있도록 `.cmd` 스크립트 3개 추가 + 배포본 재생성 (사용자 요청).
+  - 저장소 루트에 `run.cmd`(소스에서 바로 실행) / `build.cmd`(빌드+테스트) / `publish.cmd`(self-contained 배포본 생성) 추가. 더블클릭으로 쓰도록 만들었고 끝에 `pause`를 둬서 결과를 볼 수 있게 했다.
+  - 세 스크립트 공통: **PATH에 `dotnet`이 없으면 `%ProgramFiles%\dotnet\dotnet.exe`로 넘어가고**(이 PC에서 실제로 겪던 문제), `dotnet --list-sdks` 출력이 비면 "런타임만 있고 SDK가 없다"고 알려주며 `winget install Microsoft.DotNet.SDK.8`을 안내한다 — 2026-08-31 실제로 이 상황을 다시 겪어서 넣었다.
+  - `publish.cmd`/`run.cmd`는 앱이 실행 중이면 먼저 막는다(파일 잠김으로 publish가 깨지고, run은 위젯이 두 개 겹친다).
+  - **인코딩 주의**: 처음에 배치 파일을 CP949로 썼는데 한글이 깨졌다. 이 PC의 콘솔 기본 코드페이지가 **949가 아니라 65001**이었기 때문. UTF-8(BOM 없음) + `chcp 65001 >nul` 조합으로 바꿔서 어느 쪽 콘솔에서도 깨지지 않게 했다. 줄바꿈은 CRLF.
+  - **검증**: `build.cmd` 실행 → 빌드 0 경고 + 테스트 113개 통과, `publish.cmd` 실행 → `publish\` 재생성(486개 파일 163.8MB, 우리 어셈블리 15개만 갱신되고 런타임 471개는 그대로), 앱 실행 중일 때 `publish.cmd`가 차단하는 것, `run.cmd`가 실제로 앱을 띄우는 것까지 각각 확인.
+  - 배포본 실행 검증: `publish\DesktopCalendar.App.exe` 실행 후 프로세스가 정상 유지(responding)되는 것 확인. 참고로 UI Automation의 최상위 창 목록에는 잡히지 않는데, 이는 위젯이 `WorkerW` 아래로 들어갔기 때문(Phase 1 설계대로).
+  - `README.md`의 "설치" 절을 스크립트 방식 / 명령어 방식 두 갈래로 다시 씀. 배포본을 옮긴 뒤에는 자동 실행을 껐다 켜야 새 경로로 등록된다는 점(4.15)도 명시.
+- **2026-08-31**: 배포 형태를 **단일 파일 exe**로 바꿈 (사용자 요청 — "그 파일만 다른 PC로 옮겨도 실행되게"). 설계는 4.9 참조.
+  - `publish.cmd`를 `PublishSingleFile` + `EnableCompressionInSingleFile` + `IncludeNativeLibrariesForSelfExtract` 조합으로 교체. 결과물은 `dist\DesktopCalendar.exe` **하나**(70.1MB). 기존 폴더형 배포(`publish\`, 486개 파일 163.8MB)를 대체한다.
+  - exe 이름은 `-p:AssemblyName=DesktopCalendar`로 바꾸려다 실패했다 — 명령줄 `-p:`는 **참조 프로젝트에까지 전파**돼 모든 프로젝트 이름이 같아지면서 `Ambiguous project name` 복원 오류가 났다. publish 후 `move`로 이름을 바꾸는 방식으로 해결.
+  - **검증**: 다른 PC를 흉내내 빈 임시 폴더에 exe 하나만 복사해 실행 → 정상 기동. 시작 시간 실측 첫 실행 1.1초 / 이후 0.9초(압축을 켰어도 체감 지연 없음), 네이티브 추출 캐시는 `%Temp%\.net\DesktopCalendar` 9.5MB.
+  - `publish.cmd`의 "앱 실행 중이면 차단" 검사를 서브루틴으로 리팩터링하다가 **조건을 뒤집는 버그를 냈다**(`find`는 못 찾으면 errorlevel 1인데 그걸 "실행 중"으로 해석). 앱이 꺼진 상태에서 스크립트를 돌려보고 발견 — 고친 뒤 실행 중/아닌 두 경우를 모두 확인.
+  - `D:\calendar\DesktopCalendar.exe`(사용자가 쓰던 경로, 시작프로그램 바로가기가 여기를 가리킴)를 새 빌드로 갱신. `.gitignore`에 `dist/` 추가.
+  - 기존 `publish\` 폴더(163.8MB)는 이제 쓰이지 않는다 — 사용자 확인 후 정리 예정.

@@ -16,6 +16,35 @@ public static class DDayCalculator
         return target.DayNumber - today.DayNumber;
     }
 
+    /// <summary>
+    /// 기준일로부터 N일 후(음수면 N일 전)의 날짜를 구한다. 예: 2026-09-01 기준 +100일 → 2026-12-10.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">결과가 표현 가능한 날짜 범위를 벗어날 때.</exception>
+    public static DateOnly ComputeTargetFromBase(DateOnly baseDate, int offsetDays)
+    {
+        if (!TryComputeTargetFromBase(baseDate, offsetDays, out var target))
+        {
+            throw new ArgumentOutOfRangeException(nameof(offsetDays), offsetDays,
+                "기준일에 일수를 더한 결과가 날짜 범위를 벗어납니다.");
+        }
+
+        return target;
+    }
+
+    /// <summary>날짜 범위를 벗어나면 false를 돌려주는 <see cref="ComputeTargetFromBase"/> 변형 (UI 입력 검증용).</summary>
+    public static bool TryComputeTargetFromBase(DateOnly baseDate, int offsetDays, out DateOnly target)
+    {
+        var dayNumber = (long)baseDate.DayNumber + offsetDays;
+        if (dayNumber < DateOnly.MinValue.DayNumber || dayNumber > DateOnly.MaxValue.DayNumber)
+        {
+            target = default;
+            return false;
+        }
+
+        target = DateOnly.FromDayNumber((int)dayNumber);
+        return true;
+    }
+
     /// <summary>D-7, D-DAY, D+3 형태의 표시 문자열로 변환한다.</summary>
     public static string Format(int daysRemaining) => daysRemaining switch
     {

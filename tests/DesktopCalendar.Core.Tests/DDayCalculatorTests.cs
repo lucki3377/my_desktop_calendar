@@ -91,4 +91,80 @@ public class DDayCalculatorTests
         var expectedTarget = new DateOnly(2026, 2, 28);
         Assert.Equal(expectedTarget.DayNumber - today.DayNumber, result);
     }
+
+    [Fact]
+    public void ComputeTargetFromBase_PositiveOffset_AddsDays()
+    {
+        var baseDate = new DateOnly(2026, 9, 1);
+
+        var target = DDayCalculator.ComputeTargetFromBase(baseDate, 100);
+
+        Assert.Equal(new DateOnly(2026, 12, 10), target);
+    }
+
+    [Fact]
+    public void ComputeTargetFromBase_CrossesLeapDay()
+    {
+        // 2028년은 윤년이라 2/29가 포함된다.
+        var baseDate = new DateOnly(2028, 2, 27);
+
+        var target = DDayCalculator.ComputeTargetFromBase(baseDate, 3);
+
+        Assert.Equal(new DateOnly(2028, 3, 1), target);
+    }
+
+    [Fact]
+    public void ComputeTargetFromBase_ZeroOffset_ReturnsBaseDate()
+    {
+        var baseDate = new DateOnly(2026, 9, 1);
+
+        Assert.Equal(baseDate, DDayCalculator.ComputeTargetFromBase(baseDate, 0));
+    }
+
+    [Fact]
+    public void ComputeTargetFromBase_NegativeOffset_GoesBackward()
+    {
+        var baseDate = new DateOnly(2026, 3, 1);
+
+        var target = DDayCalculator.ComputeTargetFromBase(baseDate, -1);
+
+        // 2026년은 평년이므로 2/28
+        Assert.Equal(new DateOnly(2026, 2, 28), target);
+    }
+
+    [Fact]
+    public void ComputeTargetFromBase_OutOfRange_Throws()
+    {
+        var baseDate = new DateOnly(9999, 12, 31);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => DDayCalculator.ComputeTargetFromBase(baseDate, 1));
+        Assert.False(DDayCalculator.TryComputeTargetFromBase(baseDate, 1, out _));
+        Assert.False(DDayCalculator.TryComputeTargetFromBase(new DateOnly(1, 1, 1), -1, out _));
+    }
+
+    [Fact]
+    public void OffsetBased_DDay_CountsDownToComputedTarget()
+    {
+        var today = new DateOnly(2026, 9, 1);
+        var baseDate = new DateOnly(2026, 9, 1);
+        var dday = new DDay
+        {
+            Title = "100일",
+            TargetDate = DDayCalculator.ComputeTargetFromBase(baseDate, 100),
+            BaseDate = baseDate,
+            OffsetDays = 100,
+        };
+
+        Assert.True(dday.IsOffsetBased);
+        Assert.Equal(100, DDayCalculator.ComputeDaysRemaining(dday, today));
+        Assert.Equal("D-100", DDayCalculator.Format(DDayCalculator.ComputeDaysRemaining(dday, today)));
+    }
+
+    [Fact]
+    public void DirectDate_DDay_IsNotOffsetBased()
+    {
+        var dday = new DDay { Title = "발표", TargetDate = new DateOnly(2026, 8, 10) };
+
+        Assert.False(dday.IsOffsetBased);
+    }
 }

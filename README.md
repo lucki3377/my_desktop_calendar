@@ -19,22 +19,41 @@
 
 ## 설치
 
-[.NET 8 데스크톱 런타임](https://dotnet.microsoft.com/download/dotnet/8.0)이 있으면 소스에서 바로 빌드할 수 있습니다.
+### 이미 만들어진 실행파일이 있다면
+
+`DesktopCalendar.exe` **파일 하나만** 원하는 곳(USB, 다른 PC 등)에 복사하고 더블클릭하면 됩니다.
+.NET을 따로 설치할 필요가 없습니다. 서명이 없어 처음 실행할 때 SmartScreen이
+"Windows에서 PC를 보호했습니다" 경고를 띄울 수 있는데, [추가 정보] → [실행]으로 넘어가면 됩니다.
+
+> 일정 데이터는 실행파일이 아니라 **각 PC의** `%AppData%\DesktopCalendar\calendar.db`에 저장됩니다.
+> 다른 PC로 옮길 때 기존 일정도 가져가려면 앱의 **[백업 / 내보내기]** 로 `.json`을 저장해 옮긴 뒤 복원하세요.
+
+### 직접 빌드하기 — 스크립트 (권장)
+
+[.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)를 설치한 뒤, 받아온 폴더 안의 `.cmd` 파일을 **더블클릭**하면 됩니다.
+
+| 파일 | 하는 일 |
+|---|---|
+| `run.cmd` | 소스에서 바로 실행해 봅니다 (창을 닫으면 앱도 종료) |
+| `build.cmd` | 빌드 + 테스트를 돌려 이상이 없는지 확인합니다 |
+| `publish.cmd` | **배포용 실행파일 하나**(`dist\DesktopCalendar.exe`, 약 70MB)를 만듭니다 |
+
+SDK 없이 런타임만 설치돼 있으면 빌드가 되지 않습니다. 스크립트가 그 상황을 알려주고 설치 명령(`winget install Microsoft.DotNet.SDK.8`)을 안내합니다.
+
+실행파일을 특정 위치에 두고 **Windows 시작 시 자동 실행**까지 쓰려면, 파일을 원하는 자리에 옮긴 뒤 앱의 설정 창에서 [Windows 시작 시 자동 실행]을 껐다 켜세요. 지금 실행 중인 exe 경로로 바로가기가 다시 만들어집니다.
+
+### 직접 빌드하기 — 명령어
 
 ```bash
 git clone https://github.com/lucki3377/my_desktop_calendar.git
 cd my_desktop_calendar
-dotnet run --project src/DesktopCalendar.App
+
+dotnet run --project src/DesktopCalendar.App    # 바로 실행
+dotnet test DesktopCalendar.sln                 # 테스트
+
+# 단일 파일 배포본 (dist\DesktopCalendar.App.exe → DesktopCalendar.exe 로 이름만 바꿔 쓰면 됩니다)
+dotnet publish src/DesktopCalendar.App -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o dist
 ```
-
-런타임 없이 실행되는 단일 폴더로 만들려면:
-
-```bash
-dotnet publish src/DesktopCalendar.App -c Release -r win-x64 --self-contained -o publish
-```
-
-서명된 배포본이 아니라서 처음 실행할 때 SmartScreen이 "Windows에서 PC를 보호했습니다" 경고를 띄울 수 있습니다.
-[추가 정보] → [실행]으로 넘어가면 됩니다.
 
 ## 사용법
 
